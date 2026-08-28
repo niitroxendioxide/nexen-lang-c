@@ -1,0 +1,11 @@
+let object = 15;
+let other = object + 5;
+let complex = object * other + 12;
+
+object;
+
+if object == 14 {
+    other;
+} else {
+    complex;
+}

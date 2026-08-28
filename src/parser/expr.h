@@ -9,10 +9,12 @@ typedef enum {
     EXPR_ASSIGN,       
     EXPR_NUMBER,
     EXPR_BOOL,
+    EXPR_ARRAY,
     EXPR_BINARY_OPERATOR,
     EXPR_STATEMENT_END, 
     EXPR_BLOCK,
     EXPR_IF,
+    EXPR_INDEX,
 } ExprType;
 
 typedef struct Expression {
@@ -30,10 +32,20 @@ typedef struct Expression {
         } block;
 
         struct {
+            struct Expression** elements;
+            size_t count;
+        } array;
+
+        struct {
             struct Expression* condition;
             struct Expression* branch_then;
             struct Expression* branch_else;
         } conditional;
+
+        struct {
+            struct Expression* target;
+            struct Expression* index;
+        } index_expr;
 
         struct {
             char* op;
@@ -52,6 +64,13 @@ typedef struct { float left; float right; } BindingPower;
 BindingPower op_binding_power(const char* op);
 
 void display_expression(Expression* expr);
+
+Expression* parse_value(
+    Token* tokens, 
+    int* pos, 
+    size_t token_count, 
+    float weight
+);
 
 Expression* parse_block(
     Token* tokens, 

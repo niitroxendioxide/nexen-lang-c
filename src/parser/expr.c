@@ -103,6 +103,67 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
     if (*pos >= token_count) return NULL;
     Token* current = &tokens[*pos];
 
+    if (current->type == TOKEN_LPAREN) {
+        (*pos)++;
+        Expression* inner = parse_value(tokens, pos, token_count, 0); // reset min_bp inside parens
+        if (inner == NULL) return NULL;
+
+        if (tokens[*pos].type != TOKEN_RPAREN) {
+            fprintf(stderr, "Expected ')' to close expression.\n");
+            exit(1);
+        }
+        (*pos)++;
+        return inner;
+    }
+
+    if (current->type == TOKEN_LBRACKET) {
+        (*pos)++;
+        size_t capacity = 8, count = 0;
+
+        Expression** elements = malloc(sizeof(Expression*) * capacity);
+        if (elements == NULL) {
+            fprintf(stderr, "Error allocating initial elements array\n");
+            exit(1);
+        }
+
+        while (tokens[*pos].type != TOKEN_RBRACKET) {
+            if (count >= capacity) {
+                capacity *= 2;
+                Expression** temp = realloc(elements, sizeof(Expression*) * capacity);
+                if (temp == NULL) {
+                    fprintf(stderr, "Error reallocating initial elements array\n");
+                    exit(1);
+                };
+
+                elements = temp;
+            }
+
+            display_token(tokens[*pos]);
+            elements[count] = parse_value(tokens, pos, token_count, 0);
+            count++;
+           if (tokens[*pos].type == TOKEN_COMMA) {
+                (*pos)++;
+            } else if (tokens[*pos].type != TOKEN_RBRACKET) {
+                fprintf(stderr, "Expected ',' or ']' in array literal\n");
+                exit(1);
+            }
+        }
+
+        (*pos)++;
+
+        Expression* array = malloc(sizeof(Expression));
+        if (array == NULL) {
+            fprintf(stderr, "couldn't allocate the array\n");
+            exit(1);
+        }
+
+        array->type = EXPR_ARRAY;
+        array->data.array.elements = elements;
+        array->data.array.count = count;
+
+        return array;
+    }
+
     if (current->type != TOKEN_NAME) return NULL;
 
     if (strcmp(current->data.str_val, "true") == 0 || strcmp(current->data.str_val, "false") == 0) {
@@ -129,16 +190,44 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
     return parse_name(tokens, pos, token_count);
 }
 
+Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
+    Expression* expr = parse_primary(tokens, pos, token_count);
+    if (expr == NULL) return NULL;
 
+    while (*pos < token_count && tokens[*pos].type == TOKEN_LBRACKET) {
+        (*pos)++;
+
+        Expression* index_expr = parse_value(tokens, pos, token_count, 0);
+        if (index_expr == NULL) {
+            fprintf(stderr, "Expected expression inside '[ ]'\n");
+            exit(1);
+        }
+
+        if (tokens[*pos].type != TOKEN_RBRACKET) {
+            fprintf(stderr, "Expected ']' to close index\n");
+            exit(1);
+        }
+        (*pos)++;
+
+        Expression* index_node = malloc(sizeof(Expression));
+        index_node->type = EXPR_INDEX;
+        index_node->data.index_expr.target = expr;
+        index_node->data.index_expr.index = index_expr;
+
+        expr = index_node;
+    }
+
+    return expr;
+}
 
 Expression* parse_value(Token* tokens, int* pos, size_t token_count, float min_bp) {
-    Expression* left = parse_primary(tokens, pos, token_count);
+    Expression* left = parse_postfix(tokens, pos, token_count);
     if (left == NULL) return NULL;
 
     while (*pos < token_count) {
         Token* current = &tokens[*pos];
 
-        if (current->type != TOKEN_OP) break;
+        if (current->type != TOKEN_OP || strcmp(current->data.op_val, ",") == 0) break;
 
         BindingPower bp = operator_binding_power(current->data.op_val);
 

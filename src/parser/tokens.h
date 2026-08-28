@@ -12,6 +12,11 @@ typedef enum {
     TOKEN_STATEMENT_END,
     TOKEN_SCOPE_BEGIN,
     TOKEN_SCOPE_END,
+    TOKEN_LBRACKET,
+    TOKEN_RBRACKET,
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_COMMA,
 } TokenType;
 
 typedef struct {

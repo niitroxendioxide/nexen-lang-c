@@ -4,7 +4,7 @@ let complex = object * other + 12;
 
 object;
 
-if object == 14 {
+if (object == 14) {
     other;
 } else {
     complex;

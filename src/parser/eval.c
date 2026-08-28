@@ -119,6 +119,16 @@ Value evaluate(Expression* expr, Scope* scope) {
             return (Value){.type = VALUE_UNDEFINED};
         }
 
+        case EXPR_ARRAY: {
+            fprintf(stderr, "Evaluating array\n");
+            return (Value){.type = VALUE_UNDEFINED};
+        }
+
+        case EXPR_INDEX: {
+            fprintf(stderr, "Evaluating index\n");
+            return (Value){.type = VALUE_UNDEFINED};
+        }
+
         case EXPR_IF: {
             Value cond_result = evaluate(expr->data.conditional.condition, scope);
 
@@ -133,7 +143,7 @@ Value evaluate(Expression* expr, Scope* scope) {
         }
 
         default:
-            fprintf(stderr, "Cannot evaluate this expression type\n");
+            fprintf(stderr, "Cannot evaluate this expression type (%d)\n", expr->type);
             exit(1);
     }
 }

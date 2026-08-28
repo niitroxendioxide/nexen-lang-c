@@ -39,6 +39,29 @@ int is_scope_end(char input) {
     return input == '}';
 }
 
+int is_comma(char input) {
+    return input == ',';
+}
+
+TokenType is_parenthesis(char input) {
+    if (input == '(') {
+        return TOKEN_LPAREN;
+    } else if (input == ')') {
+        return TOKEN_RPAREN;
+    }
+
+    return TOKEN_EOF;
+}
+
+TokenType is_bracket(char input) {
+    if (input == '[') {
+        return TOKEN_LBRACKET;
+    } else if (input == ']') {
+        return TOKEN_RBRACKET;
+    }
+
+    return TOKEN_EOF;
+}
 
 void free_tokens(Token* tokens, int token_count) {
     if (tokens == NULL) return;
@@ -72,6 +95,19 @@ void display_token(Token token) {
         case TOKEN_STATEMENT_END:
             fprintf(stderr, "TOKEN_STATEMENT_END (;)\n");
             break;
+        case TOKEN_RPAREN:
+            fprintf(stderr, "TOKEN_RPAREN )\n");
+            break;
+        case TOKEN_LPAREN:
+            fprintf(stderr, "TOKEN_LPAREN (\n");
+            break;
+        case TOKEN_RBRACKET:
+            fprintf(stderr, "TOKEN_RBRACKET ]\n");
+            break;
+        case TOKEN_LBRACKET:
+            fprintf(stderr, "TOKEN_LBRACKET [\n");
+            break;
+
         default:
             fprintf(stderr, "UNKNOWN_TOKEN\n");
             break;
@@ -104,7 +140,26 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
             tokens = temp;
         };
 
-        if (is_statement_end(input[i])) {
+
+        TokenType parenthesis = is_parenthesis(input[i]);
+        TokenType bracket = is_bracket(input[i]);
+        
+        if (parenthesis != TOKEN_EOF) {
+            tokens[count].type = parenthesis;
+            count++;
+            i++;
+            continue;
+        } else if (bracket != TOKEN_EOF) {
+            tokens[count].type = bracket;
+            count++;
+            i++;
+            continue;
+        } else if (is_comma(input[i])) { 
+            tokens[count].type = TOKEN_COMMA;
+            count++;
+            i++;
+            continue;
+        } else if (is_statement_end(input[i])) {
             tokens[count].type = TOKEN_STATEMENT_END;
             count++;
             i++;
@@ -147,7 +202,14 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
 
             size_t begin = i;
             while (i < input_len) {
-                if (isspace((unsigned char)input[i]) || is_operator(input[i]) || is_statement_end(input[i])) {
+                if (
+                    isspace((unsigned char)input[i]) 
+                    || is_operator(input[i]) 
+                    || is_statement_end(input[i])
+                    || is_parenthesis(input[i]) != TOKEN_EOF
+                    || is_bracket(input[i]) != TOKEN_EOF
+                    || is_comma(input[i])
+                ) {
                     break;
                 }
 

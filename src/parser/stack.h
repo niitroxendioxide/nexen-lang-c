@@ -10,6 +10,8 @@ typedef enum {
     VALUE_STRING,
     VALUE_UNDEFINED,
     VALUE_BOOL,
+    VALUE_ARRAY,
+    VALUE_DICT
 } ValueType;
 
 typedef struct {
@@ -18,8 +20,14 @@ typedef struct {
         char* str_val;
         double num_val;
         int bool_val;
+
+        struct {
+            struct Value* items;
+            size_t count;
+            size_t capacity;
+        } array_val;
     } as;
-} Value;
+} Value; 
 
 typedef struct {
     char* name;

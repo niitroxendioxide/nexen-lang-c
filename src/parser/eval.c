@@ -84,7 +84,6 @@ Value evaluate(Expression* expr, Scope* scope) {
             Value result = evaluate(body->data.assign.value, scope);
             push_to_scope(scope, body->data.assign.name->data.name, result);
 
-            //fprintf(stderr, "pushed to scope: %s %f", body->data.assign.name->data.name, result.as.num_val);
             return result; 
         }
 
@@ -120,19 +119,50 @@ Value evaluate(Expression* expr, Scope* scope) {
         }
 
         case EXPR_ARRAY: {
-            fprintf(stderr, "Evaluating array\n");
-            return (Value){.type = VALUE_UNDEFINED};
+            Value* array_list = malloc(sizeof(Value) * expr->data.array.count);
+            if (array_list == NULL) {
+                fprintf(stderr, "malloc failed for array list\n");
+                exit(1);
+            }
+
+            for (int i = 0; i < expr->data.array.count; i++) {
+                Value value_of_element = evaluate(expr->data.array.elements[i], scope); 
+                array_list[i] = value_of_element;
+            }
+
+            return (Value){.type = VALUE_ARRAY, .as.array_val = {
+                .items = array_list,
+                .count = expr->data.array.count,
+                .capacity = expr->data.array.count
+                }, 
+            };
         }
 
         case EXPR_INDEX: {
-            fprintf(stderr, "Evaluating index\n");
-            return (Value){.type = VALUE_UNDEFINED};
+            Expression* index = expr->data.index_expr.index;
+            Expression* target = expr->data.index_expr.target;
+
+            Value index_val = evaluate(index, scope);
+            Value array_res = evaluate(target, scope);
+            if (array_res.type != VALUE_ARRAY) {
+                fprintf(stderr, "cannot access non-array values yet\n");
+                return (Value){.type = VALUE_UNDEFINED}; 
+            }
+
+            if (index_val.as.num_val >= array_res.as.array_val.count) {
+                fprintf(stderr, "accessing value outside bounds\n");
+                return (Value){.type = VALUE_UNDEFINED};
+            }
+
+            int c_index = (int) index_val.as.num_val;            
+            Value value_returned = array_res.as.array_val.items[c_index];
+
+            return value_returned;
         }
 
         case EXPR_IF: {
             Value cond_result = evaluate(expr->data.conditional.condition, scope);
 
-            //fprintf(stderr, "is truthy? %d", is_truthy(cond_result));
             if (is_truthy(cond_result) == 1) {
                 return evaluate(expr->data.conditional.branch_then, scope);
             } else {

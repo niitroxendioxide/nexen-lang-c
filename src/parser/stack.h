@@ -14,7 +14,7 @@ typedef enum {
     VALUE_DICT
 } ValueType;
 
-typedef struct {
+typedef struct Value {
     ValueType type;
     union {
         char* str_val;

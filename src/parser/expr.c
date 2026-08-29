@@ -138,7 +138,6 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
                 elements = temp;
             }
 
-            display_token(tokens[*pos]);
             elements[count] = parse_value(tokens, pos, token_count, 0);
             count++;
            if (tokens[*pos].type == TOKEN_COMMA) {

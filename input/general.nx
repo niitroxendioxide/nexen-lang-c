@@ -1,0 +1,27 @@
+fn magnitude(vector) {
+    let xsq = vector.x*vector.x;
+    let ysq = vector.y*vector.y;
+    return sqrt(xsq + ysq);
+}
+
+fn normalize(vector) {
+    let mag = magnitude(vector);
+    let vbobj = new_vector(vector.x / mag, vector.y / mag);
+
+    return vbobj;
+}
+
+fn new_vector(x, y) {
+    let vector_obj = {
+        x = x,
+        y = y,
+        length = magnitude,
+    };
+
+    return vector_obj;
+}
+
+let base = new_vector(10, 25);
+let normalized = normalize(base);
+
+print("x:", normalized.x, "y:", normalized.y);

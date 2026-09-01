@@ -7,6 +7,7 @@
 
 typedef enum {
     TOKEN_NAME,
+    TOKEN_STRING,
     TOKEN_OP,
     TOKEN_EOF,
     TOKEN_STATEMENT_END,

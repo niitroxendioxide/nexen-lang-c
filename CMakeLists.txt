@@ -8,6 +8,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include_directories(src)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 # glob_recurse para que busque dentro de las carpetas de src tmb :v
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.c")
 

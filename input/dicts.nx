@@ -1,0 +1,9 @@
+let user = {
+    name = "niitroxen",
+    ["age"] = 19,
+};
+
+if (user.name == "niitroxen") {
+    let age = user.age;
+    age;
+}

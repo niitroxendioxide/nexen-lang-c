@@ -10,11 +10,16 @@ typedef enum {
     EXPR_NUMBER,
     EXPR_BOOL,
     EXPR_ARRAY,
+    EXPR_STRING,
+    EXPR_DICT,
     EXPR_BINARY_OPERATOR,
     EXPR_STATEMENT_END, 
     EXPR_BLOCK,
     EXPR_IF,
     EXPR_INDEX,
+    EXPR_FUNCTION_DEF,
+    EXPR_FN_CALL,
+    EXPR_RETURN,
 } ExprType;
 
 typedef struct Expression {
@@ -30,6 +35,12 @@ typedef struct Expression {
             struct Expression** statements;
             size_t count;
         } block;
+
+        struct {
+            struct Expression** keys;
+            struct Expression** values;
+            size_t count;
+        } dict;
 
         struct {
             struct Expression** elements;
@@ -48,11 +59,25 @@ typedef struct Expression {
         } index_expr;
 
         struct {
+            char* name;
+            char** param_names;
+            size_t param_count;
+            struct Expression* body;
+        } function_def;
+
+        struct {
+            struct Expression* callee;
+            struct Expression** arguments;
+            size_t argument_count;
+        } call;
+
+        struct {
             char* op;
             struct Expression* left;
             struct Expression* right;
         } operation;
 
+        struct Expression* return_value;
         char* name;
         double value;
         int bool_val;

@@ -107,6 +107,9 @@ void display_token(Token token) {
         case TOKEN_LBRACKET:
             fprintf(stderr, "TOKEN_LBRACKET [\n");
             break;
+        case TOKEN_STRING:
+            fprintf(stderr, "TOKEN_STRING <%s>\n", token.data.str_val);
+            break;
 
         default:
             fprintf(stderr, "UNKNOWN_TOKEN\n");
@@ -194,6 +197,30 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
             }
 
             tokens[count].data.op_val = word_memory;
+
+            count++;
+        } else if (input[i] == '"') {
+            i++;
+
+            size_t begin = i;
+            while (i < input_len) {
+                if (input[i] == '"') {
+                    break;
+                }
+
+                i++;
+            }
+
+            size_t word_length = i - begin;
+            size_t mem_length = word_length + 1;
+            char* word_memory = malloc(mem_length);
+            if (word_memory != NULL) {
+                memcpy(word_memory, input + begin, word_length);
+                word_memory[word_length] = '\0';
+            }
+
+            tokens[count].data.str_val = word_memory;
+            tokens[count].type = TOKEN_STRING;
 
             count++;
             i++;

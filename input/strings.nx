@@ -1,0 +1,9 @@
+let string_text = "hello bro";
+let something = 15;
+let array_val = [[12, 25], [30, 31]];
+
+if (something == 15) {
+    let value_to_print = array_val[1][0];
+    string_text;
+    value_to_print;
+}

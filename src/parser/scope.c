@@ -34,4 +34,5 @@ void push_to_scope(Scope* scope, const char* name, Value value) {
 
 void free_scope(Scope* scope) {
     free_stack(&scope->bindings);
+    free(scope);
 }

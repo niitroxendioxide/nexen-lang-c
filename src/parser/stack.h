@@ -11,11 +11,18 @@ typedef enum {
     VALUE_UNDEFINED,
     VALUE_BOOL,
     VALUE_ARRAY,
-    VALUE_DICT
+    VALUE_DICT,
+    VALUE_FUNCTION,
+    VALUE_NATIVE_FUNCTION,
 } ValueType;
+
+typedef struct Scope Scope;
+typedef struct Value Value;
+typedef Value (*NativeFn)(Value* args, size_t arg_count);
 
 typedef struct Value {
     ValueType type;
+    int is_return;
     union {
         char* str_val;
         double num_val;
@@ -26,6 +33,20 @@ typedef struct Value {
             size_t count;
             size_t capacity;
         } array_val;
+
+        struct {
+            struct Value* keys;
+            struct Value* values;
+            size_t count;
+            size_t capacity;
+        } dict_val;
+
+        struct { 
+            struct Expression* def; 
+            struct Scope* closure; 
+        } func_val;
+
+        NativeFn native_val;
     } as;
 } Value; 
 

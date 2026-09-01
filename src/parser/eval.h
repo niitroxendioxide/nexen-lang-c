@@ -4,6 +4,7 @@
 #include "parser/scope.h"
 #include "parser/expr.h"
 
+void display_value(const char* name, Value displayed);
 Value apply_operator(char* op, Value left, Value right);
 int is_truthy(Value val);
 Value evaluate(Expression* expr, Scope* scope);

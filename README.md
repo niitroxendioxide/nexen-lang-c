@@ -14,6 +14,11 @@ chmod +x run.sh
 ./run.sh
 ```
 
+If on **Windows**, you must also run this line to ensure the usage of gcc, or run it at your own discretion, but GCC was used to build this project.
+```powershell
+cmake -G "MinGW Makefiles" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -B build
+```
+
 # How to run
 Once the executable was built, run:
 `./build/nexen input/main.nx`

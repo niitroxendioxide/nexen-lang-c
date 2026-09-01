@@ -1,0 +1,6 @@
+fn do_stuff(a, b) {
+    a + b;
+}
+
+let res = do_stuff(15, 25);
+print("do_stuff returned:", res);

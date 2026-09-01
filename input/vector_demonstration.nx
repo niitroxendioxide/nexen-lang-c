@@ -5,7 +5,7 @@ fn vector_magnitude(vector) {
 }
 
 fn vector_normalize(vector) {
-    let mag = magnitude(vector);
+    let mag = vector_magnitude(vector);
     let vbobj = new_vector(vector.x / mag, vector.y / mag);
 
     return vbobj;
@@ -15,6 +15,12 @@ fn vector_dot(vA, vB) {
     return vA.x*vB.x + vA.y*vB.y;
 }
 
+fn print_vector(vec) {
+    let vec_length = vec:length();
+    print("<vector [at=(", vec.x, ",", vec.y, "), length=(", vec_length, ")>");
+    return vec;
+}
+
 fn new_vector(x, y) {
     let vector_obj = {
         x = x,
@@ -22,14 +28,14 @@ fn new_vector(x, y) {
         length = vector_magnitude,
         normalize = vector_normalize,
         dot = vector_dot,
+        show = print_vector,
     };
 
     return vector_obj;
 }
 
-let base_vector = new_vector(0, 25);
-let perp_vector = new_vector(25, 0);
-let vec = base_vector:dot(perp_vector);
-let length = base_vector:length();
+let base_vector = new_vector(91, 32);
+let perp_vector = new_vector(236, 173);
+let direction_similarity = perp_vector:normalize():dot(base_vector:normalize()) * 100;
 
-std.print(length, "vector dot:", vec);
+print("Similarity %:", direction_similarity);

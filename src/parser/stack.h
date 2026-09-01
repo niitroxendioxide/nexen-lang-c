@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 typedef enum {
     VALUE_NUMBER,
@@ -41,9 +42,12 @@ typedef struct Value {
             size_t capacity;
         } dict_val;
 
-        struct { 
-            struct Expression* def; 
-            struct Scope* closure; 
+        struct {
+            struct Expression* def;
+            struct Scope* closure;
+            uint32_t bytecode_offset; // prob code smell to reuse value in VM & Code but it helps reusing functions, things dont gotta be perfect
+            uint8_t param_count;      // VM only: how many entries param_name_indices holds
+            uint16_t* param_name_indices; // VM only: borrowed from the loaded function table, not owned by this Value
         } func_val;
 
         NativeFn native_val;

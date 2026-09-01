@@ -1,0 +1,6 @@
+fn do_something(a, b) {
+    return true;
+}
+
+let c = do_something(10, 40);
+print("it prints:", c);

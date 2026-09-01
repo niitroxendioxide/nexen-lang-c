@@ -671,8 +671,14 @@ void display_expression(Expression* expr) {
             fprintf(stderr, "Expression (Name): %s\n", expr->data.name);
             
             break;
+        case EXPR_NUMBER:
+            fprintf(stderr, "Expression (Number Literal): %f\n", expr->data.value);
+            break;
+        case EXPR_STATEMENT_END:
+            fprintf(stderr, "Expression (Statement end)\n");
+            break;
         default:
-            fprintf(stderr, "Unsupported expression\n");
+            fprintf(stderr, "Unsupported expression, type: %d\n", expr->type);
             break;
     }
 }

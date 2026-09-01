@@ -1,0 +1,11 @@
+fn loop(i) {
+    if (i >= 10) {
+        return 1;
+    }
+
+    print("do_stuff:", i);
+
+    return i;
+}
+
+let stuff = loop(1);

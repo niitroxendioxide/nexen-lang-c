@@ -145,28 +145,6 @@ int is_truthy(Value val) {
     return 1;
 }
 
-void display_value(const char* name, Value value) {
-    switch (value.type) {
-        case VALUE_STRING:
-            printf("> (%s): %s\n", name, value.as.str_val);
-            break;
-        case VALUE_NUMBER:
-            printf("> (%s): %f\n", name, value.as.num_val);
-            break;
-        case VALUE_BOOL: {
-            const char *bool_state_text = (value.as.bool_val == 1) ? "true" : "false";
-            printf("> (%s): %s\n", name, bool_state_text);
-            break;
-        }
-        case VALUE_UNDEFINED:
-            printf("> (%s): undefined\n", name);
-            break;
-        default:
-            printf("> (%s): <value unreadable [type=%d, name=\"%s\"]>\n", name, value.type, name);
-            break;
-    }
-}
-
 Value evaluate(Expression* expr, Scope* scope) {
     switch (expr->type) {
         // core (like number & string)

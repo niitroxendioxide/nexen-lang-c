@@ -8,6 +8,7 @@ typedef struct Scope {
     struct Scope* parent;
 } Scope;
 
+void display_value(const char* name, Value value);
 Scope* create_scope(Scope* parent);
 Binding* lookup_in_scope(Scope* scope, const char* name);
 void push_to_scope(Scope* scope, const char* name, Value value);

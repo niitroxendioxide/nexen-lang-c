@@ -24,7 +24,7 @@ int is_operator(char* input) {
 */
 
 int is_operator(char input) {
-    return input == '+' || input == '-' || input == '*' || input == '/' || input == '=' || input == '.' || input == '&' || input == '|' || input == '!' || input == '>' || input == '<';
+    return input == '+' || input == '-' || input == '*' || input == '/' || input == '=' || input == '.' || input == '&' || input == '|' || input == '!' || input == '>' || input == '<' || input == ':';
 }
 
 int is_statement_end(char input) {

@@ -1,4 +1,5 @@
 #include "native/stdfns.h"
+#include "native/library.h"
 #include <math.h>
 
 static void format_number(double num, char* buf, size_t buf_size) {
@@ -60,4 +61,17 @@ Value native_sqrt(Value* args, size_t arg_count) {
     }
 
     return (Value){ .type = VALUE_NUMBER, .as.num_val = sqrt(arg_val.as.num_val) };
+}
+
+static const NativeFnEntry std_entries[] = {
+    NATIVE_FN("print", native_print),
+};
+
+static const NativeFnEntry math_entries[] = {
+    NATIVE_FN("sqrt", native_sqrt),
+};
+
+void inject_native_libraries(Scope* scope) {
+    register_native_library(scope, "std", std_entries, sizeof(std_entries) / sizeof(std_entries[0]));
+    register_native_library(scope, "math", math_entries, sizeof(math_entries) / sizeof(math_entries[0]));
 }

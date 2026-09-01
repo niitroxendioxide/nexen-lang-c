@@ -364,9 +364,11 @@ Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
             index_node->type = EXPR_INDEX;
             index_node->data.index_expr.target = expr;
             index_node->data.index_expr.index = index_expr;
+            index_node->data.index_expr.is_method_call = 0;
 
             expr = index_node;
-        } else if (tokens[*pos].type == TOKEN_OP && strcmp(tokens[*pos].data.op_val, ".") == 0) {
+        } else if (tokens[*pos].type == TOKEN_OP && (strcmp(tokens[*pos].data.op_val, ".") == 0 || strcmp(tokens[*pos].data.op_val, ":") == 0)) {
+            int is_method_call = strcmp(tokens[*pos].data.op_val, ":") == 0;
             (*pos)++;
 
             if (tokens[*pos].type != TOKEN_NAME) {
@@ -381,6 +383,7 @@ Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
 
             Expression* index_node = malloc(sizeof(Expression));
             index_node->type = EXPR_INDEX;
+            index_node->data.index_expr.is_method_call = is_method_call;
             index_node->data.index_expr.target = expr;
             index_node->data.index_expr.index = field_name;
             expr = index_node;

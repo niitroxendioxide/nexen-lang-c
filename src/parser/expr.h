@@ -56,6 +56,7 @@ typedef struct Expression {
         struct {
             struct Expression* target;
             struct Expression* index;
+            int is_method_call;
         } index_expr;
 
         struct {

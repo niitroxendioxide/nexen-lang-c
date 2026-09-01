@@ -1,27 +1,35 @@
-fn magnitude(vector) {
+fn vector_magnitude(vector) {
     let xsq = vector.x*vector.x;
     let ysq = vector.y*vector.y;
-    return sqrt(xsq + ysq);
+    return math.sqrt(xsq + ysq);
 }
 
-fn normalize(vector) {
+fn vector_normalize(vector) {
     let mag = magnitude(vector);
     let vbobj = new_vector(vector.x / mag, vector.y / mag);
 
     return vbobj;
 }
 
+fn vector_dot(vA, vB) {
+    return vA.x*vB.x + vA.y*vB.y;
+}
+
 fn new_vector(x, y) {
     let vector_obj = {
         x = x,
         y = y,
-        length = magnitude,
+        length = vector_magnitude,
+        normalize = vector_normalize,
+        dot = vector_dot,
     };
 
     return vector_obj;
 }
 
-let base = new_vector(10, 25);
-let normalized = normalize(base);
+let base_vector = new_vector(0, 25);
+let perp_vector = new_vector(25, 0);
+let vec = base_vector:dot(perp_vector);
+let length = base_vector:length();
 
-print("x:", normalized.x, "y:", normalized.y);
+std.print(length, "vector dot:", vec);

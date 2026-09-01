@@ -32,10 +32,7 @@ int run_interpreter(const char* file_name, int show_tokens) {
     Expression** expressions = parse_statements(my_tokens, token_count, &current_token_pointer, &statement_count);
     Scope* program_scope = create_scope(NULL);
 
-    Value print_fn = { .type = VALUE_NATIVE_FUNCTION, .as.native_val = native_print };
-    push_to_scope(program_scope, "print", print_fn);
-    Value sqrt_fn = { .type = VALUE_NATIVE_FUNCTION, .as.native_val = native_sqrt };
-    push_to_scope(program_scope, "sqrt", sqrt_fn);
+    inject_native_libraries(program_scope);
 
     for (size_t i = 0; i < statement_count; i++) {
         Value result = evaluate(expressions[i], program_scope);

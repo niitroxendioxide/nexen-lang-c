@@ -97,6 +97,42 @@ Value apply_operator(char* op_code, Value left, Value right) {
     }
 }
 
+Value index_into(Value accessed_value, Value index_value) {
+    switch (accessed_value.type) {
+        case VALUE_ARRAY: {
+            if (index_value.type != VALUE_NUMBER) {
+                fprintf(stderr, "Cannot index array without numbers\n");
+                return (Value){.type = VALUE_UNDEFINED};
+            }
+
+            if (index_value.as.num_val >= accessed_value.as.array_val.count) {
+                fprintf(stderr, "accessing value outside bounds\n");
+                return (Value){.type = VALUE_UNDEFINED};
+            }
+
+            int c_index = (int) index_value.as.num_val;
+            return accessed_value.as.array_val.items[c_index];
+        }
+
+        case VALUE_DICT: {
+            for (int i = 0; i < accessed_value.as.dict_val.count; i++) {
+                Value current_key = accessed_value.as.dict_val.keys[i];
+
+                if ((index_value.type == VALUE_NUMBER && current_key.type == VALUE_NUMBER && current_key.as.num_val == index_value.as.num_val)
+                    || (index_value.type == VALUE_STRING && current_key.type == VALUE_STRING && strcmp(current_key.as.str_val, index_value.as.str_val) == 0)
+                ) {
+                    return accessed_value.as.dict_val.values[i];
+                }
+            }
+
+            return (Value){.type = VALUE_UNDEFINED};
+        }
+
+        default:
+            return (Value){.type = VALUE_UNDEFINED};
+    }
+}
+
 int is_truthy(Value val) {
     if (val.type == VALUE_BOOL) {
         return val.as.bool_val == 1;
@@ -166,6 +202,7 @@ Value evaluate(Expression* expr, Scope* scope) {
             return apply_operator(expr->data.operation.op, left, right);
         }
 
+        // the let keyword
         case EXPR_DEFINE: {
             Expression* body = expr->data.define_body; 
             Value result = evaluate(body->data.assign.value, scope);
@@ -174,6 +211,7 @@ Value evaluate(Expression* expr, Scope* scope) {
             return result; 
         }
 
+        // overriding already existing variables using a = new_value
         case EXPR_ASSIGN: {
             Expression* reassigned_value = expr->data.assign.value;
             Binding* found = lookup_in_scope(scope, expr->data.assign.name->data.name); 
@@ -259,46 +297,10 @@ Value evaluate(Expression* expr, Scope* scope) {
         }
 
         case EXPR_INDEX: {
-            Expression* index = expr->data.index_expr.index;
-            Expression* target = expr->data.index_expr.target;
-            Value index_value = evaluate(index, scope);
-            Value accessed_value = evaluate(target, scope);
+            Value index_value = evaluate(expr->data.index_expr.index, scope);
+            Value accessed_value = evaluate(expr->data.index_expr.target, scope);
 
-            switch (accessed_value.type) {
-                case VALUE_ARRAY: {
-                    if (index_value.type != VALUE_NUMBER) {
-                        fprintf(stderr, "Cannot index array without numbers\n");
-                        return (Value){.type = VALUE_UNDEFINED};
-                    }
-
-                    if (index_value.as.num_val >= accessed_value.as.array_val.count) {
-                        fprintf(stderr, "accessing value outside bounds\n");
-                        return (Value){.type = VALUE_UNDEFINED};
-                    }
-
-                    int c_index = (int) index_value.as.num_val;            
-                    Value value_returned = accessed_value.as.array_val.items[c_index];
-
-                    return value_returned;
-                }
-
-                case VALUE_DICT: {
-                    for (int i = 0; i < accessed_value.as.dict_val.count; i++) {
-                        Value current_key = accessed_value.as.dict_val.keys[i];
-
-                        if ((index_value.type == VALUE_NUMBER && current_key.type == VALUE_NUMBER && current_key.as.num_val == index_value.as.num_val)
-                            || (index_value.type == VALUE_STRING && current_key.type == VALUE_STRING && strcmp(current_key.as.str_val, index_value.as.str_val) == 0)
-                        ) {
-                            return accessed_value.as.dict_val.values[i];
-                        }
-                    }
-
-                    return (Value){.type = VALUE_UNDEFINED};
-                }
-
-                default:
-                    return (Value){.type = VALUE_UNDEFINED};
-            }
+            return index_into(accessed_value, index_value);
         }
 
         case EXPR_IF: {
@@ -324,15 +326,35 @@ Value evaluate(Expression* expr, Scope* scope) {
         }
 
         case EXPR_FN_CALL: {
-            Value callee_val = evaluate(expr->data.call.callee, scope);
+            Expression* callee_expr = expr->data.call.callee;
+            int is_method_call = callee_expr->type == EXPR_INDEX && callee_expr->data.index_expr.is_method_call;
 
-            Value* arg_values = malloc(sizeof(Value) * expr->data.call.argument_count);
-            for (size_t i = 0; i < expr->data.call.argument_count; i++) {
-                arg_values[i] = evaluate(expr->data.call.arguments[i], scope);
+            Value self_value = { .type = VALUE_UNDEFINED };
+            Value callee_val;
+
+            if (is_method_call) {
+                self_value = evaluate(callee_expr->data.index_expr.target, scope);
+                Value index_value = evaluate(callee_expr->data.index_expr.index, scope);
+                callee_val = index_into(self_value, index_value);
+            } else {
+                callee_val = evaluate(callee_expr, scope);
+            }
+
+            size_t explicit_arg_count = expr->data.call.argument_count;
+            size_t total_arg_count = explicit_arg_count + (is_method_call ? 1 : 0);
+
+            Value* arg_values = malloc(sizeof(Value) * total_arg_count);
+            size_t arg_offset = 0;
+            if (is_method_call) {
+                arg_values[0] = self_value;
+                arg_offset = 1;
+            }
+            for (size_t i = 0; i < explicit_arg_count; i++) {
+                arg_values[arg_offset + i] = evaluate(expr->data.call.arguments[i], scope);
             }
 
             if (callee_val.type == VALUE_NATIVE_FUNCTION) {
-                Value result = callee_val.as.native_val(arg_values, expr->data.call.argument_count);
+                Value result = callee_val.as.native_val(arg_values, total_arg_count);
                 free(arg_values);
                 return result;
             }
@@ -343,16 +365,16 @@ Value evaluate(Expression* expr, Scope* scope) {
             }
 
             Expression* def = callee_val.as.func_val.def;
-            if (expr->data.call.argument_count != def->data.function_def.param_count) {
+            if (total_arg_count != def->data.function_def.param_count) {
                 fprintf(stderr, "Argument count mismatch calling %s\n", def->data.function_def.name);
                 exit(1);
             }
 
             Scope* call_scope = create_scope(callee_val.as.func_val.closure);
-            for (size_t i = 0; i < expr->data.call.argument_count; i++) {
+            for (size_t i = 0; i < total_arg_count; i++) {
                 push_to_scope(call_scope, def->data.function_def.param_names[i], arg_values[i]);
             }
-            
+
             free(arg_values);
             Value result = evaluate(def->data.function_def.body, call_scope);
             result.is_return = 0;

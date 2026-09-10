@@ -1,3 +1,10 @@
-let variable = 16;
-let new_var = variable + variable;
-let third = 500 + new_var;
+let base = 16;
+let name = "Niitroxen";
+let secondname = "Porky";
+let print_double = true;
+
+if (print_double == true) {
+    let double = base * 2;
+} else {
+    let triple = base * 3;
+}

@@ -33,7 +33,7 @@ ProgramFileType get_file_type(const char* file_name) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        fprintf(stderr, "Correct usage: %s <file> [--build]", argv[0]);
+        fprintf(stderr, "usage: \033[1mnexen\033[0m <file> \033[1;30m[-o | --build] [-b | --bytecode] [-t | --tokenize] [-d | --debug]\033[0m", argv[0]);
 
         return 1;
     }
@@ -49,8 +49,9 @@ int main(int argc, char** argv) {
     int tokenize_mode = 0;
     int debug_mode = 0;
     int show_elapsed_time = 0;
+    int see_bytecode = 0;
 
-    const char*output = "main.nxo";
+    const char* output = "main.nxo";
 
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--build") == 0) {
@@ -67,6 +68,8 @@ int main(int argc, char** argv) {
             debug_mode = 1;
         } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--run-time") == 0) {
             show_elapsed_time = 1;
+        } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bytecode") == 0) {
+            see_bytecode = 1;
         } else {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
             return 1;
@@ -74,13 +77,19 @@ int main(int argc, char** argv) {
     }
 
     if (type == COMPILED_FILE) {
+        if (see_bytecode == 1) {
+            print_program_bytecode(file_path);
+
+            return 0;
+        }
+
         return 1;
         // previous vm, will be replaced by a rust version
         //vm_run_bytecode_from(file_path, debug_mode, show_elapsed_time);
     }
 
     if (build_mode) {
-        return compile_program(file_path);    
+        return compile_program(file_path, output);    
         // previous compile program, came from 'compiler.h'
         //compile_program(file_path, output, tokenize_mode);
     }

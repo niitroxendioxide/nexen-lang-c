@@ -677,6 +677,18 @@ void display_expression(Expression* expr) {
         case EXPR_STATEMENT_END:
             fprintf(stderr, "Expression (Statement end)\n");
             break;
+        case EXPR_FUNCTION_DEF: {
+            fprintf(stderr, "Expression (Function Def)\n");
+            break;
+        }
+        case EXPR_FN_CALL: {
+            fprintf(stderr, "Expression (Function Call [%s])\n", expr->data.call.callee->data.name);
+            break;
+        }
+        case EXPR_BLOCK: {
+            fprintf(stderr, "Expression (Block)\n");
+            break;
+        }
         case EXPR_ASSIGN: {
             Expression* value = expr->data.assign.value;
             Expression* name = expr->data.assign.name;

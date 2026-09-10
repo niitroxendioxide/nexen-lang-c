@@ -10,7 +10,7 @@ typedef struct {
     union {
         double number;
         char* string;
-        int bool;
+        uint8_t bool;
     } as;
 } Constant;
 
@@ -40,14 +40,14 @@ typedef struct {
 void init_chunk(Chunk* chunk);
 void free_chunk(Chunk* chunk);
 
-void emit_byte(Chunk* chunk, uint8_t byte);
-void emit_u16(Chunk* chunk, uint16_t value);
+void derp_emit_byte(Chunk* chunk, uint8_t byte);
+void depr_emit_u16(Chunk* chunk, uint16_t value);
 
 // Forward-jump patching: emit_jump writes the jump opcode plus a 0xFFFF
 // placeholder and returns the placeholder's offset; patch_jump backfills that
 // placeholder with the current end of the chunk once the jump target is
 // known (i.e. once whatever the jump was skipping has finished compiling).
-int emit_jump(Chunk* chunk, uint8_t jump_opcode);
+int depr_emit_jump(Chunk* chunk, uint8_t jump_opcode);
 void patch_jump(Chunk* chunk, int jump_operand_offset);
 
 int add_number_constant(Chunk* chunk, double value);
@@ -56,6 +56,6 @@ int add_function(Chunk* chunk, uint16_t body_offset, uint8_t param_count, uint16
 
 void compile(Expression* expr, Chunk* chunk);
 
-int compile_program(const char* file_name, const char* file_output, int show_tokens);
+int compile_program_depr(const char* file_name, const char* file_output, int show_tokens);
 
 #endif

@@ -37,5 +37,3 @@ fn new_vector(x, y) {
 let base_vector = new_vector(91, 32);
 let perp_vector = new_vector(236, 173);
 let direction_similarity = perp_vector:normalize():dot(base_vector:normalize()) * 100;
-
-print("Similarity %:", direction_similarity);

@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "parser/interpreter.h"
-#include "compiler/compiler.h"
-#include "vm/virtual.h"
+//#include "compiler/compiler.h"
+//#include "vm/virtual.h"
+#include "newcomp/newcompiler.h"
 
 typedef enum {
     INVALID_FILE,
@@ -73,11 +74,15 @@ int main(int argc, char** argv) {
     }
 
     if (type == COMPILED_FILE) {
-        return vm_run_bytecode_from(file_path, debug_mode, show_elapsed_time);
+        return 1;
+        // previous vm, will be replaced by a rust version
+        //vm_run_bytecode_from(file_path, debug_mode, show_elapsed_time);
     }
 
     if (build_mode) {
-        return compile_program(file_path, output, tokenize_mode);
+        return compile_program(file_path);    
+        // previous compile program, came from 'compiler.h'
+        //compile_program(file_path, output, tokenize_mode);
     }
 
     return run_interpreter(file_path, tokenize_mode, show_elapsed_time);

@@ -524,7 +524,7 @@ Expression* parse_token(Token* tokens, int* pos, size_t token_count) {
 
     Token* current = &tokens[*pos];
 
-    if (strcmp(current->data.str_val, "let") == 0) {
+    if (strcmp(current->data.str_val, "let") == 0 || strcmp(current->data.str_val, "const") == 0) {
         Expression* new_expression = malloc(sizeof(Expression));
         if (new_expression == NULL) return NULL;
 
@@ -677,6 +677,20 @@ void display_expression(Expression* expr) {
         case EXPR_STATEMENT_END:
             fprintf(stderr, "Expression (Statement end)\n");
             break;
+        case EXPR_ASSIGN: {
+            Expression* value = expr->data.assign.value;
+            Expression* name = expr->data.assign.name;
+
+            fprintf(stderr, "Expression (Assign): %s = ", name->data.name);
+            if (value->type == EXPR_NAME) {
+                fprintf(stderr, "%s\n", value->data.name);
+            } else if (value->type == EXPR_NUMBER) {
+                fprintf(stderr, "%f\n", value->data.value);
+            } else {
+                fprintf(stderr, "<complex expression>\n"); 
+            }
+            break;
+        }
         default:
             fprintf(stderr, "Unsupported expression, type: %d\n", expr->type);
             break;

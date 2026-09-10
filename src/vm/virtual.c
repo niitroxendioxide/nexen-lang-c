@@ -81,11 +81,6 @@ CallFrame vm_pop_call_frame(VM* vm) {
     return vm->call_frames[--vm->call_frame_count];
 }
 
-// Which scope OP_DEFINE_NAME/LOAD_NAME/STORE_NAME should actually look
-// names up in: the innermost active call's locals if we're inside a call,
-// globals otherwise. This is the one place that "knows" about call frames
-// for those three opcodes — they don't need to care about the call stack
-// themselves.
 Scope* vm_current_scope(VM* vm) {
     if (vm->call_frame_count > 0) {
         return vm->call_frames[vm->call_frame_count - 1].scope_locals;
@@ -150,10 +145,6 @@ void vm_execute(VM* vm, uint8_t* code, uint32_t code_size, VMConstant* constants
                 break;
             }
             case OP_LOAD_NAME: {
-                // Falls back to globals automatically: lookup_in_scope walks
-                // Scope->parent, and a call frame's locals scope has globals
-                // as its parent (see OP_CALL below) — so a function can still
-                // read `print` or any other global without special-casing it.
                 Binding* binding = lookup_in_scope(vm_current_scope(vm), constants[operand].as.string);
                 if (binding == NULL) {
                     fprintf(stderr, "Undefined value: %s\n", constants[operand].as.string);

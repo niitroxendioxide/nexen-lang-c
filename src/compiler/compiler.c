@@ -17,7 +17,7 @@ void init_chunk(Chunk* chunk) {
     chunk->function_capacity = 0;
 }
 
-void emit_byte(Chunk* chunk, uint8_t byte) {
+void derp_emit_byte(Chunk* chunk, uint8_t byte) {
     if (chunk->count + 1 > chunk->capacity) {
         chunk->capacity = chunk->capacity < 8 ? 8 : chunk->capacity * 2;
         chunk->code = realloc(chunk->code, chunk->capacity * sizeof(uint8_t));
@@ -26,14 +26,14 @@ void emit_byte(Chunk* chunk, uint8_t byte) {
     chunk->count++;
 }
 
-void emit_u16(Chunk* chunk, uint16_t value) {
-    emit_byte(chunk, (uint8_t)(value & 0xFF));
-    emit_byte(chunk, (uint8_t)((value >> 8) & 0xFF));
+void depr_emit_u16(Chunk* chunk, uint16_t value) {
+    derp_emit_byte(chunk, (uint8_t)(value & 0xFF));
+    derp_emit_byte(chunk, (uint8_t)((value >> 8) & 0xFF));
 }
 
-int emit_jump(Chunk* chunk, uint8_t jump_opcode) {
-    emit_byte(chunk, jump_opcode);
-    emit_u16(chunk, 0xFFFF); // patch_jump() backfills this
+int depr_emit_jump(Chunk* chunk, uint8_t jump_opcode) {
+    derp_emit_byte(chunk, jump_opcode);
+    depr_emit_u16(chunk, 0xFFFF);
     return chunk->count - 2;
 }
 
@@ -83,48 +83,48 @@ void compile(Expression* expr, Chunk* chunk) {
     switch (expr->type) {
         case EXPR_NUMBER: {
             int index = add_number_constant(chunk, expr->data.value);
-            emit_byte(chunk, OP_PUSH_CONST);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_PUSH_CONST);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
         case EXPR_STRING: {
             int index = add_string_constant(chunk, expr->data.name);
-            emit_byte(chunk, OP_PUSH_CONST);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_PUSH_CONST);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
         case EXPR_BOOL: {
             int index = add_bool_constant(chunk, expr->data.bool_val);
-            emit_byte(chunk, OP_PUSH_CONST);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_PUSH_CONST);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
         case EXPR_NAME: {
             int index = add_string_constant(chunk, expr->data.name);
-            emit_byte(chunk, OP_LOAD_NAME);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_LOAD_NAME);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
         case EXPR_DEFINE: {
             Expression* body = expr->data.define_body;
             compile(body->data.assign.value, chunk);
-
             int index = add_string_constant(chunk, body->data.assign.name->data.name);
-            emit_byte(chunk, OP_DEFINE_NAME);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_DEFINE_NAME);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
         case EXPR_ASSIGN: {
             compile(expr->data.assign.value, chunk);
 
+            fprintf(stderr, "Pushed Assign: %s\n", expr->data.name);
             int index = add_string_constant(chunk, expr->data.assign.name->data.name);
-            emit_byte(chunk, OP_STORE_NAME);
-            emit_u16(chunk, (uint16_t)index);
+            derp_emit_byte(chunk, OP_STORE_NAME);
+            depr_emit_u16(chunk, (uint16_t)index);
             break;
         }
 
@@ -132,17 +132,13 @@ void compile(Expression* expr, Chunk* chunk) {
             compile(expr->data.operation.left, chunk);
             compile(expr->data.operation.right, chunk);
 
-            if (strcmp(expr->data.operation.op, "+") == 0) emit_byte(chunk, OP_BINARY_ADD);
-            else if (strcmp(expr->data.operation.op, "-") == 0) emit_byte(chunk, OP_BINARY_SUB);
-            else if (strcmp(expr->data.operation.op, "*") == 0) emit_byte(chunk, OP_BINARY_MUL);
-            else if (strcmp(expr->data.operation.op, "/") == 0) emit_byte(chunk, OP_BINARY_DIV);
+            if (strcmp(expr->data.operation.op, "+") == 0) derp_emit_byte(chunk, OP_BINARY_ADD);
+            else if (strcmp(expr->data.operation.op, "-") == 0) derp_emit_byte(chunk, OP_BINARY_SUB);
+            else if (strcmp(expr->data.operation.op, "*") == 0) derp_emit_byte(chunk, OP_BINARY_MUL);
+            else if (strcmp(expr->data.operation.op, "/") == 0) derp_emit_byte(chunk, OP_BINARY_DIV);
             break;
         }
 
-        // `obj:method(...)` calls compile the callee through EXPR_INDEX, which
-        // compile() doesn't emit yet, so they'd silently produce broken
-        // bytecode (args + OP_CALL with no callee underneath). Reject them
-        // explicitly for now instead of emitting garbage.
         case EXPR_FN_CALL: {
             Expression* callee_expr = expr->data.call.callee;
             int is_method_call = callee_expr->type == EXPR_INDEX && callee_expr->data.index_expr.is_method_call;
@@ -157,26 +153,22 @@ void compile(Expression* expr, Chunk* chunk) {
                 compile(expr->data.call.arguments[i], chunk);
             }
 
-            emit_byte(chunk, OP_CALL);
-            emit_byte(chunk, (uint8_t)expr->data.call.argument_count);
+            derp_emit_byte(chunk, OP_CALL);
+            derp_emit_byte(chunk, (uint8_t)expr->data.call.argument_count);
             break;
         }
 
-        // No separate lexical scope per block right now — only function
-        // calls get their own scope. A block is just "run these statements,
-        // discard every value except the last" (that last value is the
-        // block's own value, e.g. what a function body returns on fallthrough).
         case EXPR_BLOCK: {
             size_t count = expr->data.block.count;
             if (count == 0) {
-                emit_byte(chunk, OP_PUSH_UNDEFINED);
+                derp_emit_byte(chunk, OP_PUSH_UNDEFINED);
                 break;
             }
 
             for (size_t i = 0; i < count; i++) {
                 compile(expr->data.block.statements[i], chunk);
                 if (i + 1 < count) {
-                    emit_byte(chunk, OP_POP);
+                    derp_emit_byte(chunk, OP_POP);
                 }
             }
             break;
@@ -186,9 +178,9 @@ void compile(Expression* expr, Chunk* chunk) {
             if (expr->data.return_value != NULL) {
                 compile(expr->data.return_value, chunk);
             } else {
-                emit_byte(chunk, OP_PUSH_UNDEFINED);
+                derp_emit_byte(chunk, OP_PUSH_UNDEFINED);
             }
-            emit_byte(chunk, OP_RETURN);
+            derp_emit_byte(chunk, OP_RETURN);
             break;
         }
 
@@ -198,11 +190,11 @@ void compile(Expression* expr, Chunk* chunk) {
         // the patch) is what actually runs at definition time — it builds
         // the function value from the FunctionMeta this just registered.
         case EXPR_FUNCTION_DEF: {
-            int skip_jump = emit_jump(chunk, OP_JUMP);
+            int skip_jump = depr_emit_jump(chunk, OP_JUMP);
 
             uint16_t body_offset = (uint16_t)chunk->count;
             compile(expr->data.function_def.body, chunk);
-            emit_byte(chunk, OP_RETURN); // fallthrough guard if the body doesn't explicitly `return`
+            derp_emit_byte(chunk, OP_RETURN); // fallthrough guard if the body doesn't explicitly `return`
 
             patch_jump(chunk, skip_jump);
 
@@ -214,12 +206,12 @@ void compile(Expression* expr, Chunk* chunk) {
 
             int function_idx = add_function(chunk, body_offset, (uint8_t)param_count, param_name_indices);
 
-            emit_byte(chunk, OP_MAKE_FUNCTION);
-            emit_u16(chunk, (uint16_t)function_idx);
+            derp_emit_byte(chunk, OP_MAKE_FUNCTION);
+            depr_emit_u16(chunk, (uint16_t)function_idx);
 
             int name_idx = add_string_constant(chunk, expr->data.function_def.name);
-            emit_byte(chunk, OP_DEFINE_NAME);
-            emit_u16(chunk, (uint16_t)name_idx);
+            derp_emit_byte(chunk, OP_DEFINE_NAME);
+            depr_emit_u16(chunk, (uint16_t)name_idx);
             break;
         }
         default: {
@@ -245,6 +237,12 @@ void free_chunk(Chunk* chunk) {
 }
 
 int write_to_output(const char* file_output, Chunk* program_chunk) {
+    if (program_chunk->count <= 0) {
+        fprintf(stderr, "Rejected file output, cannot write with empty program.\n");
+
+        return 0;
+    }
+    
     uint32_t magic_constant = LANG_SIGNATURE;
     uint16_t version_major = 1;
     uint16_t version_minor = 0;
@@ -259,15 +257,9 @@ int write_to_output(const char* file_output, Chunk* program_chunk) {
     fwrite(&version_major, sizeof(version_major), 1, file);
     fwrite(&version_minor, sizeof(version_minor), 1, file);
 
-    // Header ends here (matches VMHeader read as one 12-byte struct on the VM
-    // side), so bytecode_size has to come right after version_minor, before
-    // the constant pool section below.
     uint32_t bytecode_size = (uint32_t)program_chunk->count;
     fwrite(&bytecode_size, sizeof(uint32_t), 1, file);
 
-    // Constant pool section: without this, every OP_PUSH_CONST/DEFINE_NAME/
-    // LOAD_NAME/STORE_NAME operand in the code below is an index into a table
-    // that only ever existed in this process's memory.
     uint16_t constant_count = (uint16_t)program_chunk->constant_count;
     fwrite(&constant_count, sizeof(constant_count), 1, file);
 
@@ -278,6 +270,8 @@ int write_to_output(const char* file_output, Chunk* program_chunk) {
 
         if (constant->type == CONST_NUMBER) {
             fwrite(&constant->as.number, sizeof(double), 1, file);
+        } else if (constant->type == CONST_BOOL) {
+            fwrite(&constant->as.bool, sizeof(uint8_t), 1, file);
         } else {
             uint32_t length = (uint32_t)strlen(constant->as.string);
             fwrite(&length, sizeof(length), 1, file);
@@ -285,12 +279,6 @@ int write_to_output(const char* file_output, Chunk* program_chunk) {
         }
     }
 
-    // Function table section: OP_MAKE_FUNCTION's operand indexes into this,
-    // not the constant pool. Placed after constants, before code, mirroring
-    // the constant pool's self-contained "count then entries" shape so the
-    // reader can walk it without needing offsets computed elsewhere.
-    // Format: u16 function_count, then per entry:
-    //   u16 body_offset, u8 param_count, param_count * u16 param_name_const_idx
     uint16_t function_count = (uint16_t)program_chunk->function_count;
     fwrite(&function_count, sizeof(function_count), 1, file);
 
@@ -303,12 +291,12 @@ int write_to_output(const char* file_output, Chunk* program_chunk) {
 
     fwrite(program_chunk->code, sizeof(uint8_t), bytecode_size, file);
     fclose(file);
-    printf("File output succesfully created at: %s\n", file_output);
+    printf("\033[1;33m[Nexen]\033[0m File output succesfully created at: \033[1;30m%s\033[0m\n", file_output);
 
     return 1;
 }
 
-int compile_program(const char* file_name, const char* p_output_file, int show_tokens) {
+int compile_program_depr(const char* file_name, const char* p_output_file, int show_tokens) {
     int token_count, current_token_pointer = 0;
     size_t file_size, statement_count = 0;
 

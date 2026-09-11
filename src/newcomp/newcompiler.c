@@ -38,8 +38,8 @@ void print_opcode(uint8_t op) {
         case OP_PUSH_NUM:
             printf("> PUSH_NUM ");
             break;
-        case OP_PUSH_I16:
-            printf("> PUSH_I16 ");
+        case OP_PUSH_U16:
+            printf("> PUSH_U16 ");
             break;
         case OP_PUSH_U8:
             printf("> PUSH_U8 ");
@@ -119,7 +119,7 @@ void print_compiled_program(Program* program) {
             || byte_up == OP_STORE_LOCAL || byte_up == OP_PUSH_U8) {
             i++;
             printf("%d\n", program->bytes[i]);
-        } else if (byte_up == OP_PUSH_I16 || byte_up == OP_JUMP || byte_up == OP_JUMP_IF_TRUE || byte_up == OP_JUMP_IF_FALSE) {
+        } else if (byte_up == OP_PUSH_U16 || byte_up == OP_JUMP || byte_up == OP_JUMP_IF_TRUE || byte_up == OP_JUMP_IF_FALSE) {
             uint16_t byte1 = program->bytes[++i];
             uint16_t byte2 = program->bytes[++i];
             uint16_t value = byte1 | (byte2 << 8);
@@ -295,6 +295,8 @@ Program* init_program() {
     new_program->constants = malloc(new_program->constant_limit * sizeof(Constant));
     new_program->bytes = malloc(new_program->byte_limit * sizeof(uint8_t));
     new_program->symbol_table = malloc(sizeof(SymbolTable));
+    new_program->symbol_table->count = 0;
+    new_program->symbol_table->parent = NULL;
 
     return new_program;
 }
@@ -315,21 +317,36 @@ OpCode opcode_for_op(const char* op) {
     return OP_VOID;
 }
 
+int get_str_constant(Program* program, const char* constant_value) {
+    for (int i = 0; i < program->constant_counter; i++) {
+        Constant* val = &program->constants[i];
+        if (strcmp(val->as.string, constant_value) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 uint32_t compile_expr(Program* program, Expression* expr) {
     if (expr == NULL) return 0;
 
     switch (expr->type) {
         case EXPR_NUMBER: {
             double num_value = expr->data.value;
-            if (num_value < 255) {
+            int is_int = (floor(num_value) == num_value);
+            if (abs(num_value) < 255 && is_int) {
                 emit_byte(program, OP_PUSH_U8);
                 emit_byte(program, (uint8_t) num_value);
-            } else if (abs(num_value) < MAX_I16) {
-                emit_byte(program, OP_PUSH_I16);
+            } else if (abs(num_value) < MAX_U16 && is_int) {
+                emit_byte(program, OP_PUSH_U16);
                 emit_word(program, (uint16_t) num_value);
             } else {
+                uint64_t raw_bits;
+                memcpy(&raw_bits, &num_value, sizeof(double));
+
                 emit_byte(program, OP_PUSH_NUM);
-                emit_qword(program, (uint64_t) num_value);
+                emit_qword(program, raw_bits);
             }
 
             break;
@@ -396,13 +413,16 @@ uint32_t compile_expr(Program* program, Expression* expr) {
         }
 
         case EXPR_STRING: {
-            Constant new_constant = {
-                .type = N_CONST_STRING,
-                .as.string = expr->data.name,
-            };
+            int const_pointer = get_str_constant(program, expr->data.name);
+            if (const_pointer == -1) {
+                Constant new_constant = {
+                    .type = N_CONST_STRING,
+                    .as.string = expr->data.name,
+                };
 
-            uint32_t const_pointer = push_constant(program, new_constant);
-            debug_print_formatted("Pushed String \033[1;34m[\"%s\"]\033[0m to the constant pool \033[1;35m[idx=%d]\033[0m", expr->data.name, const_pointer);
+                const_pointer = push_constant(program, new_constant);
+                debug_print_formatted("Pushed String \033[1;34m[\"%s\"]\033[0m to the constant pool \033[1;35m[idx=%d]\033[0m", expr->data.name, const_pointer);
+            }
 
             emit_byte(program, OP_LOAD_CONST);
             emit_byte(program, (uint8_t) const_pointer);
@@ -579,7 +599,7 @@ void print_program_bytecode(const char* compiled_input) {
     print_compiled_program(decomp_program);
 }
 
-int compile_program(const char* file_name, const char* output) {
+int compile_program(const char* file_name, const char* output, int see_bytecode) {
     ParsedProgram* program_expressions = parse_file_expressions(file_name);
     if (program_expressions == NULL) {
         fprintf(stderr, "Could not parse program expressions, compilation terminated.\n");
@@ -602,7 +622,9 @@ int compile_program(const char* file_name, const char* output) {
         return 1;
     }
 
-    print_compiled_program(program_result);
+    if (see_bytecode == 1) {
+        print_compiled_program(program_result);
+    }
 
     return 0;
 };

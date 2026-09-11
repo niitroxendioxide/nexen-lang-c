@@ -1,10 +1,9 @@
-let base = 16;
-let name = "Niitroxen";
-let secondname = "Porky";
-let print_double = true;
+let galofa = "Galofa";
+let big_number = 2745;
+let bool = true;
 
-if (print_double == true) {
-    let double = base * 2;
+if (galofa == "Galofa") {
+    let new = 15;
 } else {
-    let triple = base * 3;
+    let old = 30;
 }

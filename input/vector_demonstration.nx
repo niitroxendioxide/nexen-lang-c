@@ -34,6 +34,12 @@ fn new_vector(x, y) {
     return vector_obj;
 }
 
-let base_vector = new_vector(91, 32);
-let perp_vector = new_vector(236, 173);
+let vector = {
+    create = new_vector,
+};
+
+let base_vector = vector.create(91, 32);
+let perp_vector = vector.create(236, 173);
 let direction_similarity = perp_vector:normalize():dot(base_vector:normalize()) * 100;
+
+print("Dot product:", direction_similarity);

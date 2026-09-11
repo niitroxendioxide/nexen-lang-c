@@ -33,7 +33,7 @@ ProgramFileType get_file_type(const char* file_name) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: \033[1mnexen\033[0m <file> \033[1;30m[-o | --build] [-b | --bytecode] [-t | --tokenize] [-d | --debug]\033[0m", argv[0]);
+        fprintf(stderr, "usage: \033[1mnexenc\033[0m <file> \033[1;30m[-o | --build <output>] [-b | --bytecode] [-t | --tokenize] [-d | --debug]\033[0m", argv[0]);
 
         return 1;
     }
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     }
 
     if (build_mode) {
-        return compile_program(file_path, output);    
+        return compile_program(file_path, output, see_bytecode);    
         // previous compile program, came from 'compiler.h'
         //compile_program(file_path, output, tokenize_mode);
     }

@@ -1,11 +1,1 @@
-let object = 15;
-let other = object + 5;
-let complex = object * other + 12;
-
-print(object);
-
-if (object == 14) {
-    other;
-} else {
-    complex;
-}
+let something = 600000;

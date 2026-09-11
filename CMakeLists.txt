@@ -15,5 +15,5 @@ endif()
 # glob_recurse para que busque dentro de las carpetas de src tmb :v
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.c")
 
-add_executable(nexen ${SOURCES})
+add_executable(nexenc ${SOURCES})
 

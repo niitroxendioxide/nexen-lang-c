@@ -4,11 +4,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 #include "parser/intermediate.h"
 
 #define DEBUG_ACTIONS 0
 #define MAX_SYMBOL_COUNT 100
-#define MAX_I16 1 << 16
+#define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
 #define LANG_MAJOR_VER 1
 #define LANG_MINOR_VER 0
@@ -40,7 +41,7 @@ typedef enum {
     OP_DIV = 0x07,
     // faster const loading
     OP_PUSH_NUM = 0x08,
-    OP_PUSH_I16 = 0x09,
+    OP_PUSH_U16 = 0x09,
     OP_PUSH_U8 = 0x0A,
     OP_PUSH_1 = 0x0B,
     OP_PUSH_0 = 0x0C,
@@ -88,7 +89,7 @@ typedef struct {
 // should be an OpCode but i want to force it to strictly turn into a uint8_t
 void emit_byte(Program* program, uint8_t byte);
 uint32_t push_constant(Program* program, Constant constant);
-int compile_program(const char* file_name, const char* file_output);
+int compile_program(const char* file_name, const char* file_output, int see_bytecode);
 void print_program_bytecode(const char* file_name);
 
 #endif

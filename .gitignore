@@ -8,4 +8,4 @@ guide.md
 /output
 *.nxo
 *.exe
-*.c
+exam.c

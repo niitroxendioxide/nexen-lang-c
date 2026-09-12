@@ -7,26 +7,32 @@
 #include <math.h>
 #include "parser/intermediate.h"
 
-#define DEBUG_ACTIONS 0
 #define MAX_SYMBOL_COUNT 100
 #define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
-#define LANG_MAJOR_VER 1
-#define LANG_MINOR_VER 0
+#define LANG_MAJOR_VER 0
+#define LANG_MINOR_VER 1
+#define LANG_PATCH_VER 1
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {
     N_CONST_BOOL = 0,
     N_CONST_NUMBER = 1,
     N_CONST_STRING = 2,
+    N_CONST_FUNCTION = 3,
 } ConstantType;
 
 typedef struct {
-    uint8_t type; // ConstantType
+    uint8_t type;
     union {
         double number;
         int8_t boolean;
         char* string;
+
+        struct {
+            uint8_t* bytes;
+            uint8_t length;
+        } function_body;
     } as;
 } Constant;
 
@@ -57,6 +63,9 @@ typedef enum {
     OP_GEQT = 0x15,
     OP_JUMP_IF_TRUE = 0x16,
     OP_JUMP_IF_FALSE = 0x17,
+    // functions
+    OP_CALL_FN = 0x18,
+    OP_RETURN = 0x19,
 } OpCode;
 
 typedef struct {
@@ -71,15 +80,27 @@ typedef struct SymbolTable {
     struct SymbolTable* parent;
 } SymbolTable;
 
-typedef struct {
+typedef struct Function {
+    uint8_t* bytes;
+    const char* name;
+    uint8_t arg_count;
+    int length;
+} Function;
+
+typedef struct Program {
+    struct Program* enclosing;
+
     // allocated
     Constant* constants;
     uint8_t* bytes;
     SymbolTable* symbol_table;
+    Function** functions;
 
     // info
     int index_counter;
     int byte_limit;
+    int func_limit;
+    int func_count;
     uint32_t byte_counter;
 
     int constant_limit;

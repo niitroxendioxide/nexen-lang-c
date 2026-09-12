@@ -1,138 +1,6 @@
 #include "newcomp/newcompiler.h"
-#include <stdarg.h>
+#include "newcomp/debugger.h"
 #include <string.h>
-
-/* debugger */
-void debug_print(const char* text) {
-    if (DEBUG_ACTIONS != 1) {
-        return;
-    }
-
-    fprintf(stderr, "\033[1;32m[Compiler]\033[0m: %s\n", text);
-}
-
-void debug_printerr(const char* text) {
-    if (DEBUG_ACTIONS != 1) {
-        return;
-    }
-
-    fprintf(stderr, "\033[1;31m[WARNING]\033[0m: %s\n", text);
-}
-
-void debug_print_formatted(const char* format, ...) {
-    char buffer[512];
-    
-    va_list args;
-    va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-    
-    debug_print(buffer); 
-}
-
-void print_opcode(uint8_t op) {
-    switch (op) {
-        case OP_VOID:
-            printf("> NO_OP\n");
-            break;
-        case OP_PUSH_NUM:
-            printf("> PUSH_NUM ");
-            break;
-        case OP_PUSH_U16:
-            printf("> PUSH_U16 ");
-            break;
-        case OP_PUSH_U8:
-            printf("> PUSH_U8 ");
-            break;
-        case OP_PUSH_1:
-            printf("> PUSH_1\n");
-            break;
-        case OP_PUSH_0:
-            printf("> PUSH_0\n");
-            break;
-        case OP_LOAD_CONST:
-            printf("> LOAD_CONST ");
-            break;
-        case OP_STORE_LOCAL:
-            printf("> STORE_LOCAL ");
-            break;
-        case OP_LOAD_LOCAL:
-            printf("> LOAD_LOCAL ");
-            break;
-        case OP_ADD:
-            printf("> OP_ADD\n");
-            break;
-        case OP_SUB:
-            printf("> OP_SUB\n");
-            break;
-        case OP_MUL:
-            printf("> OP_MUL\n");
-            break;
-        case OP_DIV:
-            printf("> OP_DIV\n");
-            break;
-        case OP_PUSH_SCOPE:
-            printf("> OP_PUSH_SCOPE\n");
-            break;
-        case OP_POP_SCOPE:
-            printf("> OP_POP_SCOPE\n");
-            break;
-        case OP_EQ:
-            printf("> OP_EQUAL\n");
-            break;
-        case OP_NOTEQ:
-            printf("> OP_NOT_EQUAL\n");
-            break;
-        case OP_GT:
-            printf("> OP_GREATER_THAN\n");
-            break;
-        case OP_LT:
-            printf("> OP_LESS_THAN\n");
-            break;
-        case OP_LEQT:
-            printf("> OP_LESS_EQUAL_THAN\n");
-            break;
-        case OP_GEQT:
-            printf("> OP_GREATER_EQUAL_THAN\n");
-            break;
-        case OP_JUMP_IF_FALSE:
-            printf("> OP_JUMP_IF_FALSE ");
-            break;
-        case OP_JUMP_IF_TRUE:
-            printf("> OP_JUMP_IF_TRUE ");
-            break;
-        case OP_JUMP:
-            printf("> OP_JUMP ");
-            break;
-        default:
-            printf("> OP_UNKNOWN\n");
-            break;
-    }
-}
-
-void print_compiled_program(Program* program) {
-    printf("\n\033[1;30mINSTRUCTION SET:\033[0m\n");
-    for (int i = 0; i < program->byte_counter; i++) {
-        uint8_t byte_up = program->bytes[i];
-        print_opcode(byte_up);
-        if (byte_up == OP_LOAD_CONST || byte_up == OP_LOAD_LOCAL 
-            || byte_up == OP_STORE_LOCAL || byte_up == OP_PUSH_U8) {
-            i++;
-            printf("%d\n", program->bytes[i]);
-        } else if (byte_up == OP_PUSH_U16 || byte_up == OP_JUMP || byte_up == OP_JUMP_IF_TRUE || byte_up == OP_JUMP_IF_FALSE) {
-            uint16_t byte1 = program->bytes[++i];
-            uint16_t byte2 = program->bytes[++i];
-            uint16_t value = byte1 | (byte2 << 8);
-            printf("%d\n", (int16_t)value);
-        } else if (byte_up == OP_PUSH_NUM) {
-            double value;
-            memcpy(&value, &program->bytes[i + 1], sizeof(double));
-            printf("%f\n", value);
-            i += 8;
-        }
-    }
-    printf("\n");
-}
 
 /* warnings */
 void allocate_const_pool_if_full(Program* program) {
@@ -175,6 +43,24 @@ void allocate_program_bytes_if_full(Program* program) {
     program->bytes = reallocated_bytes;
 }
 
+void allocate_if_functions_full(Program* program) {
+    if (program->func_count < program->func_limit) {
+        return;
+    }
+
+    if (program->func_count >= program->func_limit) {
+        program->func_limit = program->func_limit == 0 ? 10 : program->func_limit * 2;
+    }
+
+    Function** temp_reallocated = realloc(program->functions, sizeof(Function) * program->func_limit);
+    if (temp_reallocated == NULL) {
+        fprintf(stderr, "Function* realloc failed.\n");
+        exit(1);
+    }
+
+    program->functions = temp_reallocated;
+}
+
 /* symbol indexing */
 int get_symbol_from_table(SymbolTable* table, const char* symbol) {
     for (int i = 0; i < table->count; i++) {
@@ -189,6 +75,16 @@ int get_symbol_from_table(SymbolTable* table, const char* symbol) {
 
     fprintf(stderr, "Undefined symbol: %s", symbol);
     exit(1);
+}
+
+int get_function_index(Program* program, const char* func_name) {
+    for (int i = 0; i < program->func_count; i++) {
+        if (strcmp(program->functions[i]->name, func_name) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 int get_symbol_index(Program* program, const char* symbol) {
@@ -271,6 +167,11 @@ void emit_word(Program* program, uint16_t word) {
     emit_byte(program, (word >> 8) & 0xFF);
 }
 
+void emit_dword(Program* program, int dword) {
+    emit_word(program, dword & 0xFFFF);
+    emit_word(program, (dword >> 16) & 0xFFFF);
+}
+
 void emit_qword(Program* program, uint64_t qword) {
     emit_word(program, (qword) & 0xFFFF);
     emit_word(program, (qword >> 16) & 0xFFFF);
@@ -292,13 +193,59 @@ Program* init_program() {
     new_program->constant_limit = 10;
     new_program->byte_limit = 10;
     new_program->index_counter = 0;
+    new_program->enclosing = NULL;
     new_program->constants = malloc(new_program->constant_limit * sizeof(Constant));
     new_program->bytes = malloc(new_program->byte_limit * sizeof(uint8_t));
     new_program->symbol_table = malloc(sizeof(SymbolTable));
     new_program->symbol_table->count = 0;
     new_program->symbol_table->parent = NULL;
+    new_program->func_count = 0;
+    new_program->func_limit = 10;
+    new_program->functions = malloc(sizeof(Function) * new_program->func_limit);
+ 
+    if (new_program->constants == NULL || new_program->bytes == NULL || new_program->symbol_table == NULL || new_program->functions == NULL) {
+        fprintf(stderr, "Could not allocate enough memory for the current compiled program\n");
+        exit(1);
+    }
 
     return new_program;
+}
+
+Program* enclose_program(Program* current) {
+    Program* new_program = init_program();
+    new_program->enclosing = current;
+    return new_program;
+}
+
+Program* write_to_functions(Program* current, int argc, const char* func_name) {
+    Program* parent = current->enclosing;
+    if (parent == NULL) {
+        fprintf(stderr, "Cannot write to NULL program (currently in topmost program).\n");
+        exit(1);
+    }
+
+    allocate_if_functions_full(parent);
+    
+    Function* new_func = malloc(sizeof(Function));
+    if (new_func == NULL) {
+        fprintf(stderr, "Couldn't store function, reason: malloc failed\n");
+        exit(1);
+    }
+
+    // debug_print_formatted("Writing program as function, len: %d, argc: %d", current->byte_counter, argc);
+
+    new_func->name = func_name;
+    new_func->arg_count = argc;
+    new_func->length = current->byte_counter;
+    new_func->bytes = realloc(current->bytes, sizeof(uint8_t) * current->byte_counter);
+    if (new_func->bytes == NULL) {
+        exit(1);
+    }
+
+    parent->functions[parent->func_count] = new_func;
+    parent->func_count++;
+    
+    return parent;
 }
 
 /* evaluating and compiling */
@@ -394,6 +341,62 @@ uint32_t compile_expr(Program* program, Expression* expr) {
             break;
         }
 
+        case EXPR_FUNCTION_DEF: {
+            program = enclose_program(program);
+            //debug_print("Enclosing the program");
+
+            int param_count = expr->data.function_def.param_count;
+            char** param_names = expr->data.function_def.param_names;
+            for (int i = 0; i < param_count; i++) {
+                const char* param_name = param_names[i];
+                push_symbol(program, param_name);
+                //debug_print_formatted("Added symbol %s to function %s", param_name, expr->data.function_def.name);
+            }
+
+            //debug_print_formatted("Body length: %d", expr->data.function_def.body->data.block.count);
+            Expression* f_body = expr->data.function_def.body;
+            for (int i_e = 0; i_e < f_body->data.block.count; i_e++) {
+                Expression* body_expr = f_body->data.block.statements[i_e];
+                //display_expression(body_expr);
+                compile_expr(program, body_expr);
+            }
+
+            program = write_to_functions(program, param_count, expr->data.function_def.name);
+    
+            break;
+        }
+
+        case EXPR_RETURN: {
+            Expression* returned = expr->data.return_value;
+
+            compile_expr(program, returned);
+            emit_byte(program, OP_RETURN);
+            break;
+        }
+
+        case EXPR_FN_CALL: {
+            Expression* calle = expr->data.call.callee;
+            int is_method = calle->type == EXPR_INDEX && calle->data.index_expr.is_method_call;
+
+            if (!is_method) {
+                const char* call_name = calle->data.name;
+                int func_index = get_function_index(program, call_name);
+                if (func_index == -1) {
+                    fprintf(stderr, "Function %s not defined", call_name);
+                    exit(1);
+                }
+
+                for (int i = 0; i < expr->data.call.argument_count; i++) {
+                    Expression* arg = expr->data.call.arguments[i];
+                    compile_expr(program, arg);
+                }
+
+                emit_byte(program, OP_CALL_FN);
+                emit_dword(program, func_index);
+            }
+            break;
+        };
+
         case EXPR_BINARY_OPERATOR: {
             Expression* left = expr->data.operation.left;
             Expression* right = expr->data.operation.right;
@@ -480,7 +483,7 @@ uint32_t compile_expr(Program* program, Expression* expr) {
 }
 
 int write_to_file(const char* output, Program* program) {
-    if (program->byte_counter <= 0) {
+    if (program->byte_counter <= 0 && program->func_count <= 0) {
         fprintf(stderr, "Rejected file output, cannot write with empty program.\n");
 
         return 0;
@@ -489,9 +492,11 @@ int write_to_file(const char* output, Program* program) {
     uint32_t magic_constant = LANG_SIGNATURE;
     uint16_t version_major = LANG_MAJOR_VER;
     uint16_t version_minor = LANG_MINOR_VER;
+    uint16_t version_patch = LANG_PATCH_VER;
     uint16_t language_begin = LANGUAGE_BEGIN;
     uint32_t program_size = (uint32_t) program->byte_counter;
     uint32_t constant_count = (uint32_t) program->constant_counter;
+    uint32_t function_count = (uint32_t) program->func_count;
 
     size_t filename_len = strlen(output) + 4 + 1;
     char* output_file = malloc(filename_len);
@@ -511,8 +516,10 @@ int write_to_file(const char* output, Program* program) {
     fwrite(&magic_constant, sizeof(magic_constant), 1, file);
     fwrite(&version_major, sizeof(version_major), 1, file);
     fwrite(&version_minor, sizeof(version_minor), 1, file);
+    fwrite(&version_patch, sizeof(version_patch), 1, file);
     fwrite(&program_size, sizeof(program_size), 1, file);
     fwrite(&constant_count, sizeof(constant_count), 1, file);
+    fwrite(&function_count, sizeof(function_count), 1, file);
 
     for (int i = 0; i < program->constant_counter; i++) {
         Constant constant_saved = program->constants[i];
@@ -523,6 +530,15 @@ int write_to_file(const char* output, Program* program) {
             fwrite(&length, sizeof(length), 1, file);
             fwrite(constant_saved.as.string, sizeof(char), length, file);            
         }
+    }
+
+    for (int i = 0; i < function_count; i++) {
+        Function* func_saved = program->functions[i];
+        uint8_t tag = N_CONST_FUNCTION;
+        fwrite(&tag, sizeof(uint8_t), 1, file);
+        fwrite(&func_saved->length, sizeof(int), 1, file);
+        fwrite(&func_saved->arg_count, sizeof(uint8_t), 1, file);
+        fwrite(func_saved->bytes, sizeof(uint8_t), func_saved->length, file);
     }
 
     fwrite(&language_begin, sizeof(language_begin), 1, file);
@@ -616,15 +632,17 @@ int compile_program(const char* file_name, const char* output, int see_bytecode)
 
     free_tokens(program_expressions->tokens, program_expressions->token_count);
     free(program_expressions);
+
+    if (see_bytecode == 1) {
+        print_compiled_program(program_result);
+    }
+
     int success = write_to_file(output, program_result);
     if (success == 0) {
         printf("Could not write to output %s\n", output);
         return 1;
     }
 
-    if (see_bytecode == 1) {
-        print_compiled_program(program_result);
-    }
 
     return 0;
 };

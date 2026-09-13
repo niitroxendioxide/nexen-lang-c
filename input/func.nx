@@ -1,13 +1,10 @@
-fn main(a, b) {
-    let val = a + b;
-}
-
 fn do_stuff(a, b) {
-    let c = a + b;
+    let c = a * b;
 
     return c;
 }
 
-let d = 17;
-let e = 20;
+let d = 128;
+let e = 2;
 let f = do_stuff(d, e);
+print(f, e, d);

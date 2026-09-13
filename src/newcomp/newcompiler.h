@@ -7,12 +7,12 @@
 #include <math.h>
 #include "parser/intermediate.h"
 
-#define MAX_SYMBOL_COUNT 100
+#define MAX_SYMBOL_COUNT 256
 #define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
 #define LANG_MAJOR_VER 0
 #define LANG_MINOR_VER 1
-#define LANG_PATCH_VER 1
+#define LANG_PATCH_VER 2
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {
@@ -21,6 +21,8 @@ typedef enum {
     N_CONST_STRING = 2,
     N_CONST_FUNCTION = 3,
 } ConstantType;
+
+
 
 typedef struct {
     uint8_t type;
@@ -66,6 +68,7 @@ typedef enum {
     // functions
     OP_CALL_FN = 0x18,
     OP_RETURN = 0x19,
+    OP_CALL_NATIVE = 0x1A,
 } OpCode;
 
 typedef struct {
@@ -73,6 +76,8 @@ typedef struct {
     int index;
     int unique_index;
 } Symbol;
+
+#define DEF_NATIVE_FN(fn_name, idx) (Symbol){.index = idx, .name = fn_name, .unique_index = idx }
 
 typedef struct SymbolTable {
     Symbol symbols[MAX_SYMBOL_COUNT];
@@ -83,6 +88,7 @@ typedef struct SymbolTable {
 typedef struct Function {
     uint8_t* bytes;
     const char* name;
+    uint8_t reg_count;
     uint8_t arg_count;
     int length;
 } Function;
@@ -95,6 +101,7 @@ typedef struct Program {
     uint8_t* bytes;
     SymbolTable* symbol_table;
     Function** functions;
+
 
     // info
     int index_counter;

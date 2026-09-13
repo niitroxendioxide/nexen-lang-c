@@ -2,6 +2,12 @@
 #include "newcomp/debugger.h"
 #include <string.h>
 
+static SymbolTable global_functions = {
+    .count = 256,
+    .symbols = {},
+    .parent = NULL,
+};
+
 /* warnings */
 void allocate_const_pool_if_full(Program* program) {
     if (program->constant_counter < program->constant_limit) {
@@ -233,10 +239,11 @@ Program* write_to_functions(Program* current, int argc, const char* func_name) {
     }
 
     // debug_print_formatted("Writing program as function, len: %d, argc: %d", current->byte_counter, argc);
-
+    uint8_t reg_count = current->symbol_table->count;
     new_func->name = func_name;
     new_func->arg_count = argc;
     new_func->length = current->byte_counter;
+    new_func->reg_count = reg_count;
     new_func->bytes = realloc(current->bytes, sizeof(uint8_t) * current->byte_counter);
     if (new_func->bytes == NULL) {
         exit(1);
@@ -380,19 +387,31 @@ uint32_t compile_expr(Program* program, Expression* expr) {
 
             if (!is_method) {
                 const char* call_name = calle->data.name;
+                int is_global = -1;
                 int func_index = get_function_index(program, call_name);
                 if (func_index == -1) {
-                    fprintf(stderr, "Function %s not defined", call_name);
-                    exit(1);
+                    is_global = get_symbol_from_table(&global_functions, call_name);
+                    
+                    if (is_global == -1) {
+                        fprintf(stderr, "Function %s not defined", call_name);
+                        exit(1);
+                    }
                 }
 
-                for (int i = 0; i < expr->data.call.argument_count; i++) {
+                int argc = expr->data.call.argument_count;
+                for (int i = 0; i < argc; i++) {
                     Expression* arg = expr->data.call.arguments[i];
                     compile_expr(program, arg);
                 }
 
-                emit_byte(program, OP_CALL_FN);
-                emit_dword(program, func_index);
+                if (is_global != -1) {
+                    emit_byte(program, OP_CALL_NATIVE);
+                    emit_byte(program, is_global);
+                    emit_byte(program, argc);
+                } else {
+                    emit_byte(program, OP_CALL_FN);
+                    emit_dword(program, func_index);
+                }
             }
             break;
         };
@@ -497,6 +516,7 @@ int write_to_file(const char* output, Program* program) {
     uint32_t program_size = (uint32_t) program->byte_counter;
     uint32_t constant_count = (uint32_t) program->constant_counter;
     uint32_t function_count = (uint32_t) program->func_count;
+    uint8_t registers_used = (uint8_t) program->symbol_table->count;
 
     size_t filename_len = strlen(output) + 4 + 1;
     char* output_file = malloc(filename_len);
@@ -520,6 +540,7 @@ int write_to_file(const char* output, Program* program) {
     fwrite(&program_size, sizeof(program_size), 1, file);
     fwrite(&constant_count, sizeof(constant_count), 1, file);
     fwrite(&function_count, sizeof(function_count), 1, file);
+    fwrite(&registers_used, sizeof(registers_used), 1, file);
 
     for (int i = 0; i < program->constant_counter; i++) {
         Constant constant_saved = program->constants[i];
@@ -538,6 +559,7 @@ int write_to_file(const char* output, Program* program) {
         fwrite(&tag, sizeof(uint8_t), 1, file);
         fwrite(&func_saved->length, sizeof(int), 1, file);
         fwrite(&func_saved->arg_count, sizeof(uint8_t), 1, file);
+        fwrite(&func_saved->reg_count, sizeof(uint8_t), 1, file);
         fwrite(func_saved->bytes, sizeof(uint8_t), func_saved->length, file);
     }
 
@@ -615,6 +637,11 @@ void print_program_bytecode(const char* compiled_input) {
     print_compiled_program(decomp_program);
 }
 
+void load_natives() {
+    global_functions.symbols[0] = DEF_NATIVE_FN("print", 0);
+    global_functions.symbols[1] = DEF_NATIVE_FN("len", 1);
+}
+
 int compile_program(const char* file_name, const char* output, int see_bytecode) {
     ParsedProgram* program_expressions = parse_file_expressions(file_name);
     if (program_expressions == NULL) {
@@ -623,6 +650,7 @@ int compile_program(const char* file_name, const char* output, int see_bytecode)
         return 1;
     }
 
+    load_natives();
     Program* program_result = init_program();
     for (int expr_idx = 0; expr_idx < program_expressions->expression_count; expr_idx++) {
         Expression* expr = program_expressions->expressions[expr_idx];

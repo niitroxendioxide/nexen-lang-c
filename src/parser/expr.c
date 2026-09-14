@@ -158,6 +158,7 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
             }
 
             array->type = EXPR_ARRAY;
+            array->data_type = EXPR_VAL_TYPE_ARRAY;
             array->data.array.elements = elements;
             array->data.array.count = count;
 
@@ -172,6 +173,7 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
             }
 
             str_expr->type = EXPR_STRING;
+            str_expr->data_type = EXPR_VAL_TYPE_STRING;
             str_expr->data.name = current->data.str_val;
             (*pos)++;
 
@@ -252,6 +254,7 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
                 exit(1);
             }
             dict_expr->type = EXPR_DICT;
+            dict_expr->data_type = EXPR_VAL_TYPE_DICT;
             dict_expr->data.dict.keys = keys;
             dict_expr->data.dict.values = values;
             dict_expr->data.dict.count = count;
@@ -269,6 +272,7 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
         Expression* bool_exp = malloc(sizeof(Expression));
         if (bool_exp == NULL) return NULL;
         bool_exp->type = EXPR_BOOL;
+        bool_exp->data_type = EXPR_VAL_TYPE_BOOLEAN;
         bool_exp->data.bool_val = strcmp(current->data.str_val, "false");
 
         (*pos)++;
@@ -280,6 +284,7 @@ Expression* parse_primary(Token* tokens, int* pos, size_t token_count) {
         if (num_expr == NULL) return NULL;
 
         num_expr->type = EXPR_NUMBER;
+        num_expr->data_type = EXPR_VAL_TYPE_NUMBER;
         num_expr->data.value = strtod(current->data.str_val, NULL);
 
         (*pos)++;
@@ -667,6 +672,9 @@ void display_expression(Expression* expr) {
             }
             break;
         }
+        case EXPR_STRING:
+            fprintf(stderr, "Expression (String): %s\n", expr->data.name);
+            break;
         case EXPR_NAME:
             fprintf(stderr, "Expression (Name): %s\n", expr->data.name);
             
@@ -682,7 +690,7 @@ void display_expression(Expression* expr) {
             break;
         }
         case EXPR_FN_CALL: {
-            fprintf(stderr, "Expression (Function Call [%s])\n", expr->data.call.callee->data.name);
+            fprintf(stderr, "Expression (Call \"%s\")\n", expr->data.call.callee->data.name);
             break;
         }
         case EXPR_BLOCK: {
@@ -703,6 +711,23 @@ void display_expression(Expression* expr) {
             }
             break;
         }
+        case EXPR_ARRAY: {
+            int count = expr->data.array.count;
+            fprintf(stderr, "Expression (Array): <0x%x, len: %d>\n", (void*)&expr, count);
+            break;
+        }
+        case EXPR_DICT: {
+            int count = expr->data.dict.count;
+            fprintf(stderr, "Expression (Dict): <0x%x, items: %d>\n", (void*)&expr, count);
+            break;
+        }
+        case EXPR_INDEX: {
+            Expression* idx = expr->data.index_expr.index;
+            Expression* tgt = expr->data.index_expr.target;
+            fprintf(stderr, "Expression (Index): <%s, %d>\n", idx->data.value, idx->data.name);
+            break;
+        }
+
         default:
             fprintf(stderr, "Unsupported expression, type: %d\n", expr->type);
             break;

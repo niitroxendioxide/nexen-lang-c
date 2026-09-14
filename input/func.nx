@@ -1,10 +1,8 @@
-fn do_stuff(a, b) {
-    let c = a * b;
-
-    return c;
+fn stuff(a, b) {
+    return a + b;
 }
 
-let d = 128;
-let e = 2;
-let f = do_stuff(d, e);
-print(f, e, d);
+let val1 = 100;
+let val2 = 12;
+let res = stuff(val1, val2);
+print(res);

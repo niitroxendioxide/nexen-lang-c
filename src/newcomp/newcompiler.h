@@ -10,9 +10,9 @@
 #define MAX_SYMBOL_COUNT 256
 #define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
-#define LANG_MAJOR_VER 0
+#define LANG_MAJOR_VER 1
 #define LANG_MINOR_VER 1
-#define LANG_PATCH_VER 2
+#define LANG_PATCH_VER 3
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {
@@ -20,9 +20,10 @@ typedef enum {
     N_CONST_NUMBER = 1,
     N_CONST_STRING = 2,
     N_CONST_FUNCTION = 3,
+    N_CONST_ARRAY = 4,
+    N_CONST_DICT = 5,
+    N_CONST_CLASS = 6,
 } ConstantType;
-
-
 
 typedef struct {
     uint8_t type;
@@ -53,9 +54,9 @@ typedef enum {
     OP_PUSH_U8 = 0x0A,
     OP_PUSH_1 = 0x0B,
     OP_PUSH_0 = 0x0C,
+    //OP_PUSH_SCOPE = 0x0D,  |
+    //OP_POP_SCOPE = 0x0E,   | ==> unused/discarded in run-time
     // scopes or ifs
-    OP_PUSH_SCOPE = 0x0D,
-    OP_POP_SCOPE = 0x0E,
     OP_JUMP = 0x0F,
     OP_EQ = 0x10,
     OP_NOTEQ = 0x11,
@@ -69,15 +70,20 @@ typedef enum {
     OP_CALL_FN = 0x18,
     OP_RETURN = 0x19,
     OP_CALL_NATIVE = 0x1A,
+    //arrays & dicts
+    OP_PUSH_ARRAY = 0x1B,
+    OP_PUSH_DICT = 0x1C,
+    OP_DICT_SET = 0x1E,
 } OpCode;
 
 typedef struct {
     const char* name;
     int index;
     int unique_index;
+    ConstantType type;
 } Symbol;
 
-#define DEF_NATIVE_FN(fn_name, idx) (Symbol){.index = idx, .name = fn_name, .unique_index = idx }
+#define DEF_NATIVE_FN(fn_name, idx) (Symbol){.index = idx, .name = fn_name, .unique_index = idx, .type = N_CONST_FUNCTION }
 
 typedef struct SymbolTable {
     Symbol symbols[MAX_SYMBOL_COUNT];

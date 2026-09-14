@@ -162,6 +162,13 @@ Value evaluate(Expression* expr, Scope* scope) {
             };
         }
 
+        case EXPR_BOOL: {
+            return (Value){
+                .type = VALUE_BOOL,
+                .as.bool_val = expr->data.bool_val,
+            };
+        }
+
         // (accessing scopes & varible stuff)
         case EXPR_NAME: {
             Binding* found = lookup_in_scope(scope, expr->data.name); 

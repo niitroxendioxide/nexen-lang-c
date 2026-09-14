@@ -48,7 +48,7 @@ int run_interpreter(const char* file_name, int show_tokens, int show_elapsed_tim
         int64_t diff_us = ((int64_t)t_end.tv_sec - t_start.tv_sec) * 1000000 + 
                         ((int64_t)t_end.tv_nsec - t_start.tv_nsec) / 1000;
 
-        printf("\n\033[1;32m[Program-Time]\033[0m Program elapsed time: \033[1;32m%lldus\033[0m\033[0m\n", diff_us);
+        printf("\n\033[1;32m[Nexen]\033[0m Program elapsed time: \033[1;32m%lldus\033[0m\033[0m\n", diff_us);
     }
 
     free_scope(program_scope);

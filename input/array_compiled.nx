@@ -1,0 +1,21 @@
+fn increase(a, times) {
+    if (times <= 0) {
+        return a;
+    }
+
+    return increase(a, times - 1) + 1;
+}
+
+fn write(output) {
+    print("Wow, the output is:", output);
+}
+
+fn main(input) {
+    let output = input * 2;
+    output = (100 + output) / output;
+
+    write(output);
+}
+
+let b = increase(10, 50);
+main(b);

@@ -4,6 +4,16 @@
 #include "parser/tokens.h"
 
 typedef enum {
+    EXPR_VAL_TYPE_NUMBER,
+    EXPR_VAL_TYPE_STRING,
+    EXPR_VAL_TYPE_BOOLEAN,
+    EXPR_VAL_TYPE_DICT,
+    EXPR_VAL_TYPE_ARRAY,
+    EXPR_VAL_TYPE_CLASS,
+    EXPR_VAL_TYPE_ENUM,
+} ExprValueType;
+
+typedef enum {
     EXPR_DEFINE,   
     EXPR_NAME,     
     EXPR_ASSIGN,       
@@ -24,6 +34,7 @@ typedef enum {
 
 typedef struct Expression {
     ExprType type;
+    ExprValueType data_type;
     union {
         struct Expression* define_body;
         struct {

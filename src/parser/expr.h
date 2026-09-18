@@ -30,6 +30,8 @@ typedef enum {
     EXPR_FUNCTION_DEF,
     EXPR_FN_CALL,
     EXPR_RETURN,
+    EXPR_WHILE_LOOP,
+    EXPR_FOR_LOOP,
 } ExprType;
 
 typedef struct Expression {
@@ -69,6 +71,16 @@ typedef struct Expression {
             struct Expression* index;
             int is_method_call;
         } index_expr;
+
+        struct {
+            struct Expression* body;
+            struct Expression* condition;
+        } loop_while;
+
+        struct {
+            struct Expression* body;
+            struct Expression* looped;
+        } loop_for;
 
         struct {
             char* name;

@@ -12,7 +12,7 @@
 #define LANG_SIGNATURE 0x6E786F21
 #define LANG_MAJOR_VER 1
 #define LANG_MINOR_VER 1
-#define LANG_PATCH_VER 3
+#define LANG_PATCH_VER 4
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {

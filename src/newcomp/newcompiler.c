@@ -188,6 +188,11 @@ void override_word(Program* program, uint16_t word, int pointer) {
     override_byte(program, (word >> 8) & 0xFF, pointer + 1);
 }
 
+void override_dword(Program* program, int word, int pointer) {
+    override_word(program, word & 0xFFFF, pointer);
+    override_word(program, (word >> 16) & 0xFFFF, pointer + 2);
+}
+
 void emit_word(Program* program, uint16_t word) {
     emit_byte(program, word & 0xFF);
     emit_byte(program, (word >> 8) & 0xFF);
@@ -342,27 +347,39 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
             emit_byte(program, OP_JUMP_IF_FALSE);
             emit_byte(program, reg_base);
-            int pre_then_branch_counter = program->byte_counter;
-            emit_word(program, 0xFFFF);
+            int jiffalse_counter = program->byte_counter;
+            emit_dword(program, 0xFFFFFFFF);
+            int pre_then_branch = program->byte_counter;
 
             compile_expr(program, expr->data.conditional.branch_then, -1);
             
-            emit_byte(program, OP_JUMP);
-            int post_then_branch_counter = program->byte_counter;
-            emit_word(program, 0xFFFF);
+            int skip_jump_ctr = -1;
+            if (expr->data.conditional.branch_else != NULL) {
+                emit_byte(program, OP_JUMP);
+                skip_jump_ctr = program->byte_counter;
+                emit_dword(program, 0xFFFFFFFF);
+            }
 
-            uint16_t relative_jump = (uint16_t) (post_then_branch_counter - pre_then_branch_counter);
+            int post_then_branch = program->byte_counter;
+
+            int relative_jump = (int) (post_then_branch - pre_then_branch);
             if (relative_jump > 0xFFFF) {
                 fprintf(stderr, "Block too big\n");
                 exit(1);
             }
 
-            override_word(program, relative_jump, pre_then_branch_counter);
-            compile_expr(program, expr->data.conditional.branch_else, -1);
-            int post_else_branch_counter = program->byte_counter;
-            int finished_relative_jump = (post_else_branch_counter) - (post_then_branch_counter + 2);
-            override_word(program, finished_relative_jump, post_then_branch_counter);
-            debug_print("Finished if, then & else branch");
+            override_dword(program, relative_jump, jiffalse_counter);
+
+            if (expr->data.conditional.branch_else != NULL) {
+                debug_print("Finished compiling else branch");
+                compile_expr(program, expr->data.conditional.branch_else, -1);
+                int post_else_branch_counter = program->byte_counter;
+                int finished_relative_jump = post_else_branch_counter - post_then_branch;
+                
+                override_dword(program, finished_relative_jump, skip_jump_ctr);
+            }
+
+            debug_print("Finished compiling if");
 
             break;
         }
@@ -387,6 +404,32 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
             program = write_to_functions(program, param_count, program_fn_idx);
     
+            break;
+        }
+
+        case EXPR_WHILE_LOOP: {
+            Expression* body = expr->data.loop_while.body;
+            Expression* condition = expr->data.loop_while.condition;
+
+            int free_reg = get_total_active_registers(program);
+
+            int loop_start = (int) program->byte_counter;
+            compile_expr(program, condition, free_reg);
+
+            emit_byte(program, OP_JUMP_IF_FALSE);
+            emit_byte(program, (uint8_t) free_reg);
+            int jump_dword_ptr = (int) program->byte_counter;
+            emit_dword(program, 0x0);
+
+            int jif_instruction = (int) program->byte_counter;
+            compile_expr(program, body, -1);
+
+            int jump_instruction = (int) program->byte_counter;
+            emit_byte(program, OP_JUMP);
+            emit_dword(program, loop_start - (jump_instruction + 5));
+
+            override_dword(program, (int) program->byte_counter - jif_instruction, jump_dword_ptr);
+
             break;
         }
 
@@ -447,8 +490,24 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* left = expr->data.operation.left;
             Expression* right = expr->data.operation.right;
 
-            compile_expr(program, left, reg_used + 1);
-            compile_expr(program, right, reg_used + 2);
+            int next_free = get_total_active_registers(program);
+            int l_reg = next_free;
+            int r_reg = next_free + 1;
+            uint8_t l_changed = 0;
+
+            if (left->type == EXPR_NAME) {
+                l_changed = 1;
+                l_reg = get_symbol_index(program, left->data.name);
+            } else {
+                compile_expr(program, left, l_reg);
+            }
+
+            if (right->type == EXPR_NAME) {
+                r_reg = get_symbol_index(program, right->data.name);
+            } else {
+                if (l_changed == 1) r_reg = next_free;
+                compile_expr(program, right, r_reg);
+            }
             
             OpCode operation = opcode_for_op(expr->data.operation.op);
             if (operation == OP_VOID) {
@@ -458,8 +517,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             
             emit_byte(program, operation);
             emit_byte(program, (uint8_t) reg_used);
-            emit_byte(program, (uint8_t) reg_used + 1);
-            emit_byte(program, (uint8_t) reg_used + 2);
+            emit_byte(program, (uint8_t) l_reg);
+            emit_byte(program, (uint8_t) r_reg);
 
             break;
         }

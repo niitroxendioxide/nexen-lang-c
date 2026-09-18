@@ -1,0 +1,7 @@
+// define a!
+let a = 0;
+let limit = 10;
+while a < limit {
+    a = a + 1;
+    print(a);
+}

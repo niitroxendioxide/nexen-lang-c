@@ -176,17 +176,21 @@ void print_bytes(uint8_t* bytes, int total) {
             printf("%d, %d\n", reg, (int16_t) value);
 
         } else if (byte_up == OP_JUMP) {
-            uint16_t byte1 = bytes[++i];
-            uint16_t byte2 = bytes[++i];
-            uint16_t value = byte1 | (byte2 << 8);
-            printf("%d\n", (int16_t) value);
+            int32_t byte1 = bytes[++i];
+            int32_t byte2 = bytes[++i];
+            int32_t byte3 = bytes[++i];
+            int32_t byte4 = bytes[++i];
+            int32_t value = byte1 | (byte2 << 8) | (byte3 << 16) | (byte4 << 24);
+            printf("%d\n", (int32_t) value);
 
         }  else if (byte_up == OP_JUMP_IF_TRUE || byte_up == OP_JUMP_IF_FALSE) {
             uint8_t reg_compared = bytes[++i];
-            uint16_t byte1 = bytes[++i];
-            uint16_t byte2 = bytes[++i];
-            uint16_t value = byte1 | (byte2 << 8);
-            printf("R%d, %d\n", (uint8_t) reg_compared, (int16_t) value);
+            int32_t byte1 = bytes[++i];
+            int32_t byte2 = bytes[++i];
+            int32_t byte3 = bytes[++i];
+            int32_t byte4 = bytes[++i];
+            int32_t value = byte1 | (byte2 << 8) | (byte3 << 16) | (byte4 << 24);
+            printf("R%d, %d\n", (uint8_t) reg_compared, (int32_t) value);
 
         } else if (byte_up == OP_PUSH_NUM) {
             uint8_t reg = bytes[++i];

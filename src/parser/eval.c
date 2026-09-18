@@ -229,6 +229,17 @@ Value evaluate(Expression* expr, Scope* scope) {
             return last;
         }
 
+        case EXPR_WHILE_LOOP: {
+            Expression* condition = expr->data.loop_while.condition;
+            Expression* body = expr->data.loop_while.body;
+
+            while (is_truthy(evaluate(condition, scope))) {
+                evaluate(body, scope);
+            }
+
+            return (Value) { .type = VALUE_UNDEFINED };
+        }
+
         case EXPR_ARRAY: {
             Value* array_list = malloc(sizeof(Value) * expr->data.array.count);
             if (array_list == NULL) {

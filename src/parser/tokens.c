@@ -127,6 +127,14 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
 
     size_t i = 0;
     while (i < input_len) {
+        if (i + 1 < input_len && input[i] == '/' && input[i + 1] == '/') {
+            while (i < input_len && input[i] != '\n') {
+                i++;
+            }
+
+            continue;
+        }
+
         if (isspace((unsigned char)input[i])) {
             i++;
             continue;

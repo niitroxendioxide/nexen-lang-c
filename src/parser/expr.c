@@ -522,6 +522,38 @@ Expression* parse_if(Token* tokens, int* pos, size_t token_count) {
     return if_expression;
 }
 
+Expression* parse_loop(Token* tokens, int* pos, size_t token_count) {
+    int is_for = strcmp(tokens[*pos].data.str_val, "for") == 0;
+    if (is_for) {
+        return NULL;
+    }
+
+    (*pos)++;
+
+    Expression* condition = parse_value(tokens, pos, token_count, 0.0);
+    if (condition == NULL) {
+        return NULL;
+    }
+
+    display_expression(condition);
+
+    if (tokens[*pos].type != TOKEN_SCOPE_BEGIN) {
+        return NULL;
+    }
+
+    Expression* body = parse_block(tokens, pos, token_count);
+    if (body == NULL) {
+        return NULL;
+    }
+
+    Expression* loop_expr = malloc(sizeof(Expression));
+    loop_expr->type = EXPR_WHILE_LOOP;
+    loop_expr->data.loop_while.body = body;
+    loop_expr->data.loop_while.condition = condition;
+
+    return loop_expr;
+}
+
 Expression* parse_token(Token* tokens, int* pos, size_t token_count) {
     if (*pos >= token_count) {
         return NULL;
@@ -546,6 +578,8 @@ Expression* parse_token(Token* tokens, int* pos, size_t token_count) {
         return new_expression;
     } else if (strcmp(current->data.str_val, "if") == 0) {
         return parse_if(tokens, pos, token_count);
+    } else if (strcmp(current->data.str_val, "while") == 0 || strcmp(current->data.str_val, "for") == 0) {
+        return parse_loop(tokens, pos, token_count);
     } else if (*pos + 1 < token_count && tokens[*pos + 1].type == TOKEN_OP && strcmp(tokens[*pos + 1].data.op_val, "=") == 0) {
         Expression* assign_body = parse_assignment(tokens, pos, token_count);
 
@@ -620,11 +654,11 @@ Expression** parse_statements(Token* tokens, size_t token_count, int* current_to
                 exit(1);
             }
 
-            if (new_expression->type != EXPR_IF && new_expression->type != EXPR_FUNCTION_DEF) {
+            if (new_expression->type != EXPR_IF && new_expression->type != EXPR_FUNCTION_DEF && new_expression->type != EXPR_FOR_LOOP && new_expression->type != EXPR_WHILE_LOOP) {
                 if (tokens[*current_token_pos].type == TOKEN_STATEMENT_END) {
                    (*current_token_pos)++;
                 } else {
-                    fprintf(stderr, "Exiting on lack of token statement end?\n[Warning]: make sure to add support if the statement should continue without ;\n");
+                    fprintf(stderr, "Exiting on lack of token statement end. Expression type: %d\n\033[1;31m[Warning]\033[0m: make sure to add support if the statement should continue without ';'\n", new_expression->type);
                     exit(1);
                 }
             } 
@@ -662,7 +696,7 @@ void display_expression(Expression* expr) {
             Expression* body = expr->data.define_body;
             Expression* value = body->data.assign.value;
 
-            fprintf(stderr, "Expression (Define): %s = ", body->data.assign.name->data.name);
+            fprintf(stderr, "Define <Expr>: %s = ", body->data.assign.name->data.name);
             if (value->type == EXPR_NAME) {
                 fprintf(stderr, "%s\n", value->data.name);
             } else if (value->type == EXPR_NUMBER) {
@@ -672,36 +706,40 @@ void display_expression(Expression* expr) {
             }
             break;
         }
+        case EXPR_BOOL: {
+            fprintf(stderr, "bool <Expr>: %s\n", expr->data.bool_val == 1 ? "true" : "false");
+            break;
+        }
         case EXPR_STRING:
-            fprintf(stderr, "Expression (String): %s\n", expr->data.name);
+            fprintf(stderr, "String <Expr>: %s\n", expr->data.name);
             break;
         case EXPR_NAME:
-            fprintf(stderr, "Expression (Name): %s\n", expr->data.name);
+            fprintf(stderr, "Name <Expr>: %s\n", expr->data.name);
             
             break;
         case EXPR_NUMBER:
-            fprintf(stderr, "Expression (Number Literal): %f\n", expr->data.value);
+            fprintf(stderr, "Number Literal <Expr>: %f\n", expr->data.value);
             break;
         case EXPR_STATEMENT_END:
-            fprintf(stderr, "Expression (Statement end)\n");
+            fprintf(stderr, "Statement end <Expr>\n");
             break;
         case EXPR_FUNCTION_DEF: {
-            fprintf(stderr, "Expression (Function Def)\n");
+            fprintf(stderr, "Function Def <Expr>\n");
             break;
         }
         case EXPR_FN_CALL: {
-            fprintf(stderr, "Expression (Call \"%s\")\n", expr->data.call.callee->data.name);
+            fprintf(stderr, "Call \"%s\" <Expr>\n", expr->data.call.callee->data.name);
             break;
         }
         case EXPR_BLOCK: {
-            fprintf(stderr, "Expression (Block)\n");
+            fprintf(stderr, "Block <Expr>\n");
             break;
         }
         case EXPR_ASSIGN: {
             Expression* value = expr->data.assign.value;
             Expression* name = expr->data.assign.name;
 
-            fprintf(stderr, "Expression (Assign): %s = ", name->data.name);
+            fprintf(stderr, "Assign <Expr>: %s = ", name->data.name);
             if (value->type == EXPR_NAME) {
                 fprintf(stderr, "%s\n", value->data.name);
             } else if (value->type == EXPR_NUMBER) {
@@ -711,20 +749,24 @@ void display_expression(Expression* expr) {
             }
             break;
         }
+        case EXPR_BINARY_OPERATOR: {
+            fprintf(stderr, "Operation <Expr>: (0x%x [%s] 0x%x)\n", (void*)&expr->data.operation.left, expr->data.operation.op, (void*)&expr->data.operation.right);
+            break;
+        }
         case EXPR_ARRAY: {
             int count = expr->data.array.count;
-            fprintf(stderr, "Expression (Array): <0x%x, len: %d>\n", (void*)&expr, count);
+            fprintf(stderr, "Array <Expr>: {0x%x, len: %d}\n", (void*)&expr, count);
             break;
         }
         case EXPR_DICT: {
             int count = expr->data.dict.count;
-            fprintf(stderr, "Expression (Dict): <0x%x, items: %d>\n", (void*)&expr, count);
+            fprintf(stderr, "Dict <Expr>: {0x%x, items: %d}\n", (void*)&expr, count);
             break;
         }
         case EXPR_INDEX: {
             Expression* idx = expr->data.index_expr.index;
             Expression* tgt = expr->data.index_expr.target;
-            fprintf(stderr, "Expression (Index): <%s, %d>\n", idx->data.value, idx->data.name);
+            fprintf(stderr, "Index <Expr>: [%s, %d]\n", idx->data.value, idx->data.name);
             break;
         }
 

@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEBUG_ACTIONS 0
+#define DEBUG_ACTIONS 1
 
 typedef struct Compiler Compiler;
 typedef struct Program Program;

@@ -477,7 +477,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_byte(program, loop_reg);
                 emit_byte(program, (uint8_t) 1); 
 
-                emit_byte(program, OP_LEQT);
+                emit_byte(program, OP_LT);
                 emit_byte(program, jump_reg);
                 emit_byte(program, symbol_reg);
                 emit_byte(program, jump_reg);
@@ -490,6 +490,16 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 int block_start = program->byte_counter;
 
                 compile_expr(program, body, jump_reg + 1);
+
+                emit_byte(program, OP_PUSH_U8);
+                int free_reg = get_total_active_registers(program);
+                emit_byte(program, free_reg);
+                emit_byte(program, (uint8_t) 1);
+
+                emit_byte(program, OP_ADD);
+                emit_byte(program, symbol_reg);
+                emit_byte(program, symbol_reg);
+                emit_byte(program, (uint8_t) free_reg);
 
                 int body_ended_ptr = program->byte_counter;
                 int body_size = (body_ended_ptr - block_start) + 5;

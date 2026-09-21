@@ -8,13 +8,6 @@
 
 // let array = [10, 20, 30];
 
-let range = 1..=20;
-
-for a in 1..10 {
+for a in 1..300 {
     print(a);
-
-    if a > 5 {
-        let b = a + 10;
-        print("over 5! + 10? :", b);
-    }
 }

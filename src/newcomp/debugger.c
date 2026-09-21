@@ -45,7 +45,7 @@ const char* expr_type_to_str(Expression* expr) {
 void print_opcode(uint8_t op) {
     switch (op) {
         case OP_VOID:
-            printf("> NO_OP\n");
+            printf("> VOID\n");
             break;
         case OP_PUSH_NUM:
             printf("> PUSH_NUM ");
@@ -78,16 +78,16 @@ void print_opcode(uint8_t op) {
             printf("> LOAD_FIELD ");
             break;
         case OP_ADD:
-            printf("> OP_ADD ");
+            printf("> ADD ");
             break;
         case OP_SUB:
-            printf("> OP_SUB ");
+            printf("> SUB ");
             break;
         case OP_MUL:
-            printf("> OP_MUL ");
+            printf("> MUL ");
             break;
         case OP_DIV:
-            printf("> OP_DIV ");
+            printf("> DIV ");
             break;
         /*case OP_PUSH_SCOPE:
             printf("> OP_PUSH_SCOPE\n");
@@ -96,46 +96,46 @@ void print_opcode(uint8_t op) {
             printf("> OP_POP_SCOPE\n");
             break;*/
         case OP_EQ:
-            printf("> OP_EQUAL ");
+            printf("> EQ ");
             break;
         case OP_NOTEQ:
-            printf("> OP_NOT_EQUAL ");
+            printf("> NEQ ");
             break;
         case OP_GT:
-            printf("> OP_GT ");
+            printf("> GT ");
             break;
         case OP_LT:
-            printf("> OP_LT ");
+            printf("> LT ");
             break;
         case OP_LEQT:
-            printf("> OP_LEQT ");
+            printf("> LEQT ");
             break;
         case OP_GEQT:
-            printf("> OP_GEQT ");
+            printf("> GEQT ");
             break;
         case OP_JUMP_IF_FALSE:
-            printf("> OP_JUMP_IF_FALSE ");
+            printf("> JNEQ ");
             break;
         case OP_JUMP_IF_TRUE:
-            printf("> OP_JUMP_IF_TRUE ");
+            printf("> JEQ ");
             break;
         case OP_JUMP:
-            printf("> OP_JUMP ");
+            printf("> JUMP ");
             break;
         case OP_CALL_FN:
-            printf("> OP_CALL ");
+            printf("> CALL ");
             break;
         case OP_RETURN:
-            printf("> OP_RETURN ");
+            printf("> RET ");
             break;
         case OP_CALL_NATIVE:
-            printf("> OP_NATIVE ");
+            printf("> SYSCALL ");
             break;
         case OP_PUSH_ARRAY:
-            printf("> OP_PUSH_ARRAY ");
+            printf("> PUSH_ARR ");
             break;
         default:
-            printf("> OP_UNKNOWN\n");
+            printf("> UNKNOWN\n");
             break;
     }
 }

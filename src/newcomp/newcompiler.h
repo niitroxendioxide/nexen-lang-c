@@ -73,9 +73,9 @@ typedef enum {
     //arrays & dicts
     OP_PUSH_ARRAY = 0x1B,
     OP_PUSH_DICT = 0x1C,
-    OP_DICT_SET = 0x1E,
-    OP_NEW_STRUCT = 0x1F,
-    OP_LOAD_FIELD = 0x20,
+    OP_DICT_SET = 0x1D,
+    OP_NEW_STRUCT = 0x1E,
+    OP_LOAD_FIELD = 0x1F,
 } OpCode;
 
 typedef struct {

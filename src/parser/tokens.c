@@ -127,9 +127,23 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
 
     size_t i = 0;
     while (i < input_len) {
-        if (i + 1 < input_len && input[i] == '/' && input[i + 1] == '/') {
-            while (i < input_len && input[i] != '\n') {
-                i++;
+        if ((i + 1) < input_len && input[i] == '/') {
+            const char next = input[i + 1];
+            if (next == '/') {
+                while (i < input_len && input[i] != '\n') {
+                    i++;
+                }
+            } else if (next == '*') {
+                while ((i + 1) < input_len) {
+                    const char current = input[i];
+                    const char next = input[i + 1];
+                    if (current == '*' && next == '/') {
+                        i += 2;
+                        break;
+                    }
+
+                    i++;
+                }
             }
 
             continue;

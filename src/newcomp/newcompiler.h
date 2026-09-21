@@ -74,6 +74,8 @@ typedef enum {
     OP_PUSH_ARRAY = 0x1B,
     OP_PUSH_DICT = 0x1C,
     OP_DICT_SET = 0x1E,
+    OP_NEW_STRUCT = 0x1F,
+    OP_LOAD_FIELD = 0x20,
 } OpCode;
 
 typedef struct {
@@ -110,6 +112,7 @@ typedef struct Program {
 
 
     // info
+    int reserved_registers;
     int index_counter;
     int byte_limit;
     int func_limit;

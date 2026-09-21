@@ -69,7 +69,8 @@ void allocate_if_functions_full(Program* program) {
 
 /* symbol indexing */
 int get_symbol_from_table(SymbolTable* table, const char* symbol) {
-    for (int i = 0; i < table->count; i++) {
+    for (int i = table->count - 1; i >= 0; --i) {
+        // printf("at %d\n", i);
         if (strcmp(table->symbols[i].name, symbol) == 0) {
             return table->symbols[i].unique_index;
         }
@@ -107,6 +108,17 @@ int get_symbol_index(Program* program, const char* symbol) {
     return get_symbol_from_table(program->symbol_table, symbol);
 } 
 
+int get_total_active_registers(Program* program) {
+    int total = 0;
+    SymbolTable* current = program->symbol_table;
+    while (current != NULL) {
+        total += current->count;
+        current = current->parent;
+    }
+    return total + program->reserved_registers; 
+}
+
+
 int push_symbol(Program* program, const char* symbol) {
     if (program->symbol_table->count >= MAX_SYMBOL_COUNT) {
         fprintf(stderr, "Program exceeded the maximum amount of symbols\n");
@@ -129,7 +141,7 @@ int push_symbol(Program* program, const char* symbol) {
     program->symbol_table->symbols[program->symbol_table->count] = new_symbol;
     program->symbol_table->count++;
 
-    return program->index_counter++;
+    return (program->index_counter++);
 }
 
 void push_scope(Program* program) {
@@ -156,16 +168,6 @@ void pop_scope(Program* program) {
     free(program->symbol_table);
     program->index_counter -= added_symbols;
     program->symbol_table = parent;
-}
-
-int get_total_active_registers(Program* program) {
-    int total = 0;
-    SymbolTable* current = program->symbol_table;
-    while (current != NULL) {
-        total += current->count;
-        current = current->parent;
-    }
-    return total;
 }
 
 /* emitting */
@@ -216,6 +218,24 @@ uint32_t push_constant(Program* program, Constant constant_val) {
     return program->constant_counter++;
 }
 
+void free_registers(Program* program, int amount) {
+    int res_registers = program->reserved_registers;
+    
+    if (res_registers < amount) {
+        program->reserved_registers = 0;
+        program->index_counter -= res_registers;
+    } else {
+        program->reserved_registers -= amount;
+        program->index_counter -= amount;
+    }
+}
+
+void reserve_registers(Program* program, int amount) {
+    program->reserved_registers += amount;
+    program->index_counter += amount;
+}
+
+
 /* initializing program & scopes */
 Program* init_program() {
     Program* new_program = malloc(sizeof(Program));
@@ -225,6 +245,7 @@ Program* init_program() {
     new_program->byte_limit = 10;
     new_program->index_counter = 0;
     new_program->enclosing = NULL;
+    new_program->reserved_registers = 0;
     new_program->constants = malloc(new_program->constant_limit * sizeof(Constant));
     new_program->bytes = malloc(new_program->byte_limit * sizeof(uint8_t));
     new_program->symbol_table = malloc(sizeof(SymbolTable));
@@ -331,7 +352,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             push_scope(program);
             for (int i = 0; i < expr->data.block.count; i++) {
                 Expression* cur_block_expr = expr->data.block.statements[i];
-                compile_expr(program, cur_block_expr, -1);
+                compile_expr(program, cur_block_expr, reg_used);
             }
             pop_scope(program);
             //emit_byte(program, OP_POP_SCOPE);
@@ -433,6 +454,56 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             break;
         }
 
+        case EXPR_FOR_LOOP: {
+            Expression* variable = expr->data.loop_for.variable;
+            Expression* body = expr->data.loop_for.body;
+            Expression* looping = expr->data.loop_for.looping;
+            
+            compile_expr(program, variable, -1);
+            
+            int loop_reg = get_total_active_registers(program);
+            if (looping->type == EXPR_RANGE) {
+                const char* loop_idx_symbol = variable->data.define_body->data.assign.name->data.name;
+                // debug_print("compiling range!");
+
+                compile_expr(program, looping, loop_reg);
+                int jump_reg = loop_reg + 1;
+                int symbol_reg = get_symbol_index(program, loop_idx_symbol);
+
+                reserve_registers(program, 2);
+                int condition_ptr = program->byte_counter;
+                emit_byte(program, OP_LOAD_FIELD);
+                emit_byte(program, jump_reg);
+                emit_byte(program, loop_reg);
+                emit_byte(program, (uint8_t) 1); 
+
+                emit_byte(program, OP_LEQT);
+                emit_byte(program, jump_reg);
+                emit_byte(program, symbol_reg);
+                emit_byte(program, jump_reg);
+
+                emit_byte(program, OP_JUMP_IF_FALSE);
+                emit_byte(program, jump_reg);
+
+                int jump_dest_ptr = program->byte_counter;
+                emit_dword(program, 0x0);
+                int block_start = program->byte_counter;
+
+                compile_expr(program, body, jump_reg + 1);
+
+                int body_ended_ptr = program->byte_counter;
+                int body_size = (body_ended_ptr - block_start) + 5;
+                override_dword(program, body_size, jump_dest_ptr);
+
+                int diff = (condition_ptr - (body_ended_ptr + 5));
+                emit_byte(program, OP_JUMP);
+                emit_dword(program, diff);
+                free_registers(program, 2);
+            }
+
+            break;
+        }
+
         case EXPR_RETURN: {
             Expression* returned = expr->data.return_value;
             int dest_reg = get_total_active_registers(program);
@@ -514,6 +585,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 fprintf(stderr, "Operation [%s] not implemented\n", expr->data.operation.op);
                 exit(1);
             }
+
+            printf("Using register: %d\n", reg_used);
             
             emit_byte(program, operation);
             emit_byte(program, (uint8_t) reg_used);
@@ -525,6 +598,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
         case EXPR_NUMBER: {
             double num_value = expr->data.value;
+            debug_print_formatted("Expression number: %d", num_value);
 
             int is_int = (floor(num_value) == num_value);
             if (abs(num_value) < 255 && is_int) {
@@ -585,6 +659,28 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             break;
         }*/
 
+        case EXPR_RANGE: {
+            int free_reg = get_total_active_registers(program);
+
+            // setting up pre-values
+            compile_expr(program, expr->data.range.start, free_reg);
+            compile_expr(program, expr->data.range.end, free_reg + 1);
+
+            if (expr->data.range.included == 1) {
+                emit_byte(program, OP_PUSH_1);
+            } else {
+                emit_byte(program, OP_PUSH_0);
+            }
+            emit_byte(program, (uint8_t) free_reg + 2);
+
+            // creating struct
+            emit_byte(program, OP_NEW_STRUCT);
+            emit_byte(program, (uint8_t) reg_used);
+            emit_byte(program, (uint8_t) 3);
+
+            break;
+        }
+
         case EXPR_ARRAY: { 
             int count = expr->data.array.count;
 
@@ -626,8 +722,10 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
         case EXPR_DEFINE: {
             Expression* def_body = expr->data.define_body;
             Expression* assign_name = def_body->data.assign.name;
-            uint16_t symbol_index = push_symbol(program, assign_name->data.name);
-            compile_expr(program, def_body, (int) symbol_index);
+            int symbol_index = push_symbol(program, assign_name->data.name);
+            // printf("Symbol index is: %d\n", symbol_index);
+
+            compile_expr(program, def_body, symbol_index);
 
             break;
         }
@@ -635,8 +733,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
         case EXPR_ASSIGN: {
             Expression* assign_value = expr->data.assign.value;
             const char* assign_name = expr->data.assign.name->data.name;
-            uint16_t stored_symbol_index = get_symbol_index(program, assign_name);
-            compile_expr(program, assign_value, (int) stored_symbol_index);
+            // uint16_t stored_symbol_index = get_symbol_index(program, assign_name);
+            compile_expr(program, assign_value, reg_used);
             
             //debug_print_formatted("Expression:");
             // display_expression(assign_value);

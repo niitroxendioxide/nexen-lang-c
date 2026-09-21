@@ -15,6 +15,7 @@ typedef enum {
     VALUE_DICT,
     VALUE_FUNCTION,
     VALUE_NATIVE_FUNCTION,
+    VALUE_RANGE,
 } ValueType;
 
 typedef struct Scope Scope;
@@ -34,6 +35,12 @@ typedef struct Value {
             size_t count;
             size_t capacity;
         } array_val;
+
+        struct {
+            double end;
+            double start;
+            int included;
+        } range;
 
         struct {
             struct Value* keys;

@@ -71,6 +71,12 @@ void print_opcode(uint8_t op) {
         case OP_LOAD_LOCAL:
             printf("> LOAD_LOCAL ");
             break;
+        case OP_NEW_STRUCT:
+            printf("> NEW_STRUCT ");
+            break;
+        case OP_LOAD_FIELD:
+            printf("> LOAD_FIELD ");
+            break;
         case OP_ADD:
             printf("> OP_ADD ");
             break;
@@ -96,16 +102,16 @@ void print_opcode(uint8_t op) {
             printf("> OP_NOT_EQUAL ");
             break;
         case OP_GT:
-            printf("> OP_GREATER_THAN ");
+            printf("> OP_GT ");
             break;
         case OP_LT:
-            printf("> OP_LESS_THAN ");
+            printf("> OP_LT ");
             break;
         case OP_LEQT:
-            printf("> OP_LESS_EQUAL_THAN ");
+            printf("> OP_LEQT ");
             break;
         case OP_GEQT:
-            printf("> OP_GREATER_EQUAL_THAN ");
+            printf("> OP_GEQT ");
             break;
         case OP_JUMP_IF_FALSE:
             printf("> OP_JUMP_IF_FALSE ");
@@ -173,7 +179,18 @@ void print_bytes(uint8_t* bytes, int total) {
             uint16_t byte1 = bytes[++i];
             uint16_t byte2 = bytes[++i];
             uint16_t value = byte1 | (byte2 << 8);
-            printf("%d, %d\n", reg, (int16_t) value);
+            printf("R%d, %d\n", reg, (int16_t) value);
+
+        } else if (byte_up == OP_NEW_STRUCT) {
+            uint8_t reg = bytes[++i];
+            uint8_t size = bytes[++i];
+            printf("R%d, %d\n", reg, size);
+
+        } else if (byte_up == OP_LOAD_FIELD) {
+            uint8_t reg_dest = bytes[++i];
+            uint8_t reg_ref = bytes[++i];
+            uint8_t idx = bytes[++i];
+            printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, idx);
 
         } else if (byte_up == OP_JUMP) {
             int32_t byte1 = bytes[++i];

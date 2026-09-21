@@ -8,12 +8,13 @@ BindingPower operator_binding_power(const char* op) {
     if (strcmp(op, "=") == 0)  return (BindingPower){0.1f, 0.2f};
     if (strcmp(op, "||") == 0) return (BindingPower){0.3f, 0.4f};
     if (strcmp(op, "&&") == 0) return (BindingPower){0.5f, 0.6f};
+    if (strcmp(op, "..") == 0 || strcmp(op, "..=") == 0) return (BindingPower){3.0f, 3.1f};
     if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return (BindingPower){0.7f, 0.8f};
-    if (strcmp(op, "<") == 0 || strcmp(op, ">") == 0 ||
-        strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0) return (BindingPower){0.9f, 1.0f};
     if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return (BindingPower){1.0f, 1.1f};
     if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return (BindingPower){2.0f, 2.1f};
     if (strcmp(op, ".") == 0 || strcmp(op, "[") == 0) return (BindingPower){4.0f, 4.1f};
+    if (strcmp(op, "<") == 0 || strcmp(op, ">") == 0 ||
+        strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0) return (BindingPower){0.9f, 1.0f};
     fprintf(stderr, "Invalid operator: %s\n", op);
     exit(1);
 }
@@ -26,6 +27,20 @@ int expect_op(Token* tokens, int* pos, const char* op, size_t token_count) {
 
     Token* current = &tokens[*pos];
     if (strcmp(current->data.op_val, op) == 0) {
+        (*pos)++;
+        return 1;
+    }
+
+    return 0;
+}
+
+int expect_token(Token* tokens, int* pos, const char* token_str, size_t token_count) {
+    if (*pos >= token_count) {
+        return 0;
+    }
+
+    Token* current = &tokens[*pos];
+    if (strcmp(current->data.str_val, token_str) == 0) {
         (*pos)++;
         return 1;
     }
@@ -439,12 +454,23 @@ Expression* parse_value(Token* tokens, int* pos, size_t token_count, float min_b
         Expression* right = parse_value(tokens, pos, token_count, bp.right);
         if (right == NULL) return NULL;
 
-        Expression* op_expr = malloc(sizeof(Expression));
-        if (op_expr == NULL) return NULL;
-        op_expr->type = EXPR_BINARY_OPERATOR;
-        op_expr->data.operation.op = current->data.op_val;
-        op_expr->data.operation.left = left;
-        op_expr->data.operation.right = right;
+        Expression* op_expr = NULL;
+        if (strcmp(current->data.op_val, "..") == 0 || strcmp(current->data.op_val, "..=") == 0) {
+            int is_included = (strcmp(current->data.op_val, "..=") == 0);
+            op_expr = malloc(sizeof(Expression));
+            if (op_expr == NULL) return NULL;
+            op_expr->type = EXPR_RANGE;
+            op_expr->data.range.included = is_included;
+            op_expr->data.range.start = left;
+            op_expr->data.range.end = right;
+        } else {
+            op_expr = malloc(sizeof(Expression));
+            if (op_expr == NULL) return NULL;
+            op_expr->type = EXPR_BINARY_OPERATOR;
+            op_expr->data.operation.op = current->data.op_val;
+            op_expr->data.operation.left = left;
+            op_expr->data.operation.right = right;
+        }
 
         left = op_expr;
     }
@@ -524,34 +550,72 @@ Expression* parse_if(Token* tokens, int* pos, size_t token_count) {
 
 Expression* parse_loop(Token* tokens, int* pos, size_t token_count) {
     int is_for = strcmp(tokens[*pos].data.str_val, "for") == 0;
+    (*pos)++; // to consume either while/for
+
     if (is_for) {
-        return NULL;
+        Expression* var_name = parse_name(tokens, pos, token_count);
+        if (var_name == NULL) return NULL;
+
+        if (expect_token(tokens, pos, "in", token_count) == 0) {
+            return NULL;
+        }
+
+        Expression* looped = parse_value(tokens, pos, token_count, 0.0);
+        if (looped == NULL) return NULL;
+        Expression* block = parse_block(tokens, pos, token_count);
+        if (block == NULL) return NULL;
+
+        Expression* variable_assignment = malloc(sizeof(Expression));
+        if (variable_assignment == NULL) return NULL;
+        
+        Expression* assign_body = malloc(sizeof(Expression));
+        if (assign_body == NULL) return NULL;
+
+        assign_body->type = EXPR_ASSIGN;
+        assign_body->data.assign.name = var_name;
+        assign_body->data.assign.value = looped->data.range.start;
+
+        variable_assignment->type = EXPR_DEFINE;
+        variable_assignment->data.define_body = assign_body;
+
+        Expression* loop_expr = malloc(sizeof(Expression));
+        if (loop_expr == NULL) return NULL;
+
+        loop_expr->type = EXPR_FOR_LOOP;
+        loop_expr->data.loop_for.variable = variable_assignment;
+        loop_expr->data.loop_for.looping = looped;
+        loop_expr->data.loop_for.body = block;
+
+        // display_expression(looped);
+
+        return loop_expr;
+    } else {
+        Expression* condition = parse_value(tokens, pos, token_count, 0.0);
+        if (condition == NULL) {
+            return NULL;
+        }
+    
+        // display_expression(condition);
+    
+        if (tokens[*pos].type != TOKEN_SCOPE_BEGIN) {
+            return NULL;
+        }
+    
+        Expression* body = parse_block(tokens, pos, token_count);
+        if (body == NULL) {
+            return NULL;
+        }
+    
+        Expression* loop_expr = malloc(sizeof(Expression));
+        if (loop_expr == NULL) return NULL;
+
+        loop_expr->type = EXPR_WHILE_LOOP;
+        loop_expr->data.loop_while.body = body;
+        loop_expr->data.loop_while.condition = condition;
+    
+        return loop_expr;
     }
 
-    (*pos)++;
-
-    Expression* condition = parse_value(tokens, pos, token_count, 0.0);
-    if (condition == NULL) {
-        return NULL;
-    }
-
-    display_expression(condition);
-
-    if (tokens[*pos].type != TOKEN_SCOPE_BEGIN) {
-        return NULL;
-    }
-
-    Expression* body = parse_block(tokens, pos, token_count);
-    if (body == NULL) {
-        return NULL;
-    }
-
-    Expression* loop_expr = malloc(sizeof(Expression));
-    loop_expr->type = EXPR_WHILE_LOOP;
-    loop_expr->data.loop_while.body = body;
-    loop_expr->data.loop_while.condition = condition;
-
-    return loop_expr;
 }
 
 Expression* parse_token(Token* tokens, int* pos, size_t token_count) {
@@ -704,6 +768,28 @@ void display_expression(Expression* expr) {
             } else {
                 fprintf(stderr, "<complex expression>\n"); 
             }
+            break;
+        }
+        case EXPR_RANGE: {
+            Expression* start = expr->data.range.start;
+            Expression* end = expr->data.range.end;
+            fprintf(stderr, "Range <expr>: ");
+            if (start->type == EXPR_NAME) {
+                fprintf(stderr, "%s..", start->data.name);
+            } else if (start->type == EXPR_NUMBER) {
+                fprintf(stderr, "%f..", start->data.value);
+            } else {
+                fprintf(stderr, "<complex expression>.."); 
+            }
+
+            if (end->type == EXPR_NAME) {
+                fprintf(stderr, "%s\n", end->data.name);
+            } else if (end->type == EXPR_NUMBER) {
+                fprintf(stderr, "%f\n", end->data.value);
+            } else {
+                fprintf(stderr, "<complex expression>\n"); 
+            }
+            
             break;
         }
         case EXPR_BOOL: {

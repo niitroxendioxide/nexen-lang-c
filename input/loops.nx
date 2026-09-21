@@ -1,7 +1,17 @@
-// define a!
-let a = 0;
-let limit = 10;
-while a < limit {
-    a = a + 1;
+// one line comment
+
+/* 
+    I can now write multi 
+    line
+    comments
+*/
+
+// let array = [10, 20, 30];
+for a in 1..10 {
     print(a);
+
+    if a > 5 {
+        let b = a + 10;
+        print("over 5! + 10? :", b);
+    }
 }

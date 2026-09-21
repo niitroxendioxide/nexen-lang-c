@@ -1,6 +1,9 @@
 #include "parser/eval.h"
 #include <math.h>
 
+#define nil (Value){.type = VALUE_UNDEFINED}
+#define NumVal(x) (Value){.type = VALUE_NUMBER, .as.num_val = (x) }
+
 int are_both_numbers(Value left, Value right) {
     return left.type == right.type && left.type == VALUE_NUMBER;
 }
@@ -190,6 +193,7 @@ Value evaluate(Expression* expr, Scope* scope) {
         // the let keyword
         case EXPR_DEFINE: {
             Expression* body = expr->data.define_body; 
+            // printf("defining variable! %s\n", body->data.assign.name->data.name);
             Value result = evaluate(body->data.assign.value, scope);
             push_to_scope(scope, body->data.assign.name->data.name, result);
 
@@ -207,8 +211,8 @@ Value evaluate(Expression* expr, Scope* scope) {
             }
 
             Value new_value = evaluate(reassigned_value, scope);
-
             found->value = new_value;
+
             return new_value;
         }
 
@@ -237,7 +241,59 @@ Value evaluate(Expression* expr, Scope* scope) {
                 evaluate(body, scope);
             }
 
-            return (Value) { .type = VALUE_UNDEFINED };
+            return nil;
+        }
+
+        case EXPR_FOR_LOOP: {
+            Expression* variable = expr->data.loop_for.variable;
+            Expression* looping_through = expr->data.loop_for.looping;
+            Expression* body = expr->data.loop_for.body;
+
+            const char* var_name = variable->data.define_body->data.assign.name->data.name;     
+            evaluate(variable, scope);
+            Value loop_thru = evaluate(looping_through, scope);
+
+            if (loop_thru.type == VALUE_RANGE) {
+
+                Value base_val = NumVal(loop_thru.as.range.start);
+
+                int is_included = loop_thru.as.range.included;
+                double st_val = loop_thru.as.range.start;
+                double end_val = loop_thru.as.range.end;
+                while ((is_included && st_val <= end_val) || (!is_included && st_val < end_val)) {
+                    evaluate(body, scope);
+
+                    st_val++;
+
+                    Binding* var_binding = lookup_in_scope(scope, var_name);
+                    // printf("rebinding: %s\n", var_name);
+                    var_binding->value = NumVal(st_val);
+                }
+            } else if (loop_thru.type == VALUE_ARRAY) {
+                push_to_scope(scope, var_name, nil);
+                for (int i = 0; i < loop_thru.as.array_val.count; i++) {
+                    Value item = loop_thru.as.array_val.items[i];
+                    Binding* var_binding = lookup_in_scope(scope, var_name);
+                    var_binding->value = item;
+
+                    evaluate(body, scope);
+                }
+            }
+
+            // 
+            return nil;
+        }
+
+        case EXPR_RANGE: {
+            Value start_num = evaluate(expr->data.range.start, scope);
+            Value end_num = evaluate(expr->data.range.end, scope);
+
+            return (Value) { 
+                .type = VALUE_RANGE,
+                .as.range.start = start_num.as.num_val,
+                .as.range.end = end_num.as.num_val,
+                .as.range.included = expr->data.range.included,
+            };
         }
 
         case EXPR_ARRAY: {

@@ -32,6 +32,7 @@ typedef enum {
     EXPR_RETURN,
     EXPR_WHILE_LOOP,
     EXPR_FOR_LOOP,
+    EXPR_RANGE,
 } ExprType;
 
 typedef struct Expression {
@@ -43,6 +44,12 @@ typedef struct Expression {
             struct Expression* name;
             struct Expression* value;
         } assign;
+
+        struct {
+            struct Expression* start;
+            struct Expression* end;
+            int included;
+        } range;
 
         struct {
             struct Expression** statements;
@@ -78,8 +85,9 @@ typedef struct Expression {
         } loop_while;
 
         struct {
+            struct Expression* variable;
+            struct Expression* looping;
             struct Expression* body;
-            struct Expression* looped;
         } loop_for;
 
         struct {

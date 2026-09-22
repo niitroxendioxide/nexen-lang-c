@@ -18,5 +18,6 @@ void debug_print_formatted(const char* format, ...);
 void print_bytes(uint8_t* bytes, int count);
 void print_compiled_program(Program* program);
 const char* expr_type_to_str(Expression* expr);
+const char* expr_val_to_str(int val_type);
 
 #endif

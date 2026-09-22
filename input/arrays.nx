@@ -1,0 +1,5 @@
+let extra = "john";
+let extra2 = "haha";
+let names = ["hey!", "wow!", extra, extra2];
+let val = names[2];
+print(val);

@@ -2,7 +2,7 @@
 #include "newcomp/debugger.h"
 #include <string.h>
 
-static SymbolTable global_functions = {
+static SymbolTable global_symbols = {
     .count = 0,
     .symbols = {},
     .parent = NULL,
@@ -104,9 +104,40 @@ int get_function_index(Program* program, const char* func_name) {
     return -1;
 }
 
+Symbol* find_symbol(SymbolTable* table, const char* symbol) {
+    for (int i = table->count - 1; i >= 0; --i) {
+        // printf("at %d\n", i);
+        if (strcmp(table->symbols[i].name, symbol) == 0) {
+            return &table->symbols[i];
+        }
+    }
+
+    if (table->parent != NULL) {
+        return find_symbol(table->parent, symbol);
+    }
+
+    if (table != &global_symbols) {
+        return find_symbol(&global_symbols, symbol);
+    }
+
+    return NULL;
+}
+
+Symbol get_symbol(SymbolTable* table, const char* symbol) {
+    Symbol* found = find_symbol(table, symbol);
+    if (found == NULL) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "Symbol %s not defined", symbol);
+        debug_printerr(buf);
+        exit(1);
+    }
+
+    return *found;
+}
+
 int get_symbol_index(Program* program, const char* symbol) {
     return get_symbol_from_table(program->symbol_table, symbol);
-} 
+}
 
 int get_total_active_registers(Program* program) {
     int total = 0;
@@ -118,8 +149,7 @@ int get_total_active_registers(Program* program) {
     return total + program->reserved_registers; 
 }
 
-
-int push_symbol(Program* program, const char* symbol) {
+Symbol* push_symbol_entry(Program* program, const char* symbol) {
     if (program->symbol_table->count >= MAX_SYMBOL_COUNT) {
         fprintf(stderr, "Program exceeded the maximum amount of symbols\n");
         exit(1);
@@ -136,12 +166,19 @@ int push_symbol(Program* program, const char* symbol) {
         .name = symbol,
         .index = program->symbol_table->count,
         .unique_index = program->index_counter,
+        .value = Comp_NilVal,
     };
 
-    program->symbol_table->symbols[program->symbol_table->count] = new_symbol;
+    int slot = program->symbol_table->count;
+    program->symbol_table->symbols[slot] = new_symbol;
     program->symbol_table->count++;
+    program->index_counter++;
 
-    return (program->index_counter++);
+    return &program->symbol_table->symbols[slot];
+}
+
+int push_symbol(Program* program, const char* symbol) {
+    return push_symbol_entry(program, symbol)->unique_index;
 }
 
 void push_scope(Program* program) {
@@ -335,7 +372,7 @@ OpCode opcode_for_op(const char* op) {
 int get_str_constant(Program* program, const char* constant_value) {
     for (int i = 0; i < program->constant_counter; i++) {
         Constant* val = &program->constants[i];
-        if (strcmp(val->as.string, constant_value) == 0) {
+        if (val->type == N_CONST_STRING && strcmp(val->as.string, constant_value) == 0) {
             return i;
         }
     }
@@ -343,8 +380,8 @@ int get_str_constant(Program* program, const char* constant_value) {
     return -1;
 }
 
-ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
-    if (expr == NULL) return 0;
+SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
+    if (expr == NULL) return Comp_NilVal;
 
     switch (expr->type) {
         case EXPR_BLOCK: {
@@ -357,7 +394,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             pop_scope(program);
             //emit_byte(program, OP_POP_SCOPE);
 
-            break;
+            return Comp_NilVal;
         }
 
         case EXPR_IF: {
@@ -402,7 +439,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
             debug_print("Finished compiling if");
 
-            break;
+            return Comp_NilVal;
         }
 
         case EXPR_FUNCTION_DEF: {
@@ -424,8 +461,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             }
 
             program = write_to_functions(program, param_count, program_fn_idx);
-    
-            break;
+
+            return Comp_NilVal;
         }
 
         case EXPR_WHILE_LOOP: {
@@ -451,7 +488,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
             override_dword(program, (int) program->byte_counter - jif_instruction, jump_dword_ptr);
 
-            break;
+            return Comp_NilVal;
         }
 
         case EXPR_FOR_LOOP: {
@@ -511,7 +548,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 free_registers(program, 2);
             }
 
-            break;
+            return Comp_NilVal;
         }
 
         case EXPR_RETURN: {
@@ -521,7 +558,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             compile_expr(program, returned, dest_reg);
             emit_byte(program, OP_RETURN);
             emit_byte(program, dest_reg);
-            break;
+
+            return Comp_NilVal;
         }
 
         case EXPR_FN_CALL: {
@@ -541,7 +579,16 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 int func_index = get_function_index(program, call_name);
                 debug_print_formatted("function index: %d", func_index);
                 if (func_index == -1) {
-                    is_global = get_symbol_from_table(&global_functions, call_name);
+                    Symbol* global_symbol = find_symbol(&global_symbols, call_name);
+                    if (global_symbol != NULL && global_symbol->global == 1 && global_symbol->value.type == EXPR_VAL_TYPE_FUNCTION) {
+                        is_global = global_symbol->unique_index;
+                    } else {
+                        const char str[] = "Compilation aborted, reason:\n\033[1;31m[Compile Error]\033[0m: Cannot call %s, symbol undefined.\n";
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), str, call_name);
+                        debug_printerr(buf);
+                        exit(1);
+                    }
                 }
 
                 debug_print_formatted("compiling argument pushing. starting at reg: %d", reg_used);
@@ -564,7 +611,8 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
                 debug_print("function call written.");
             }
-            break;
+
+            return Comp_NilVal;
         };
 
         case EXPR_BINARY_OPERATOR: {
@@ -575,35 +623,49 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             int l_reg = next_free;
             int r_reg = next_free + 1;
             uint8_t l_changed = 0;
+            SymbolValue l_value;
 
             if (left->type == EXPR_NAME) {
                 l_changed = 1;
-                l_reg = get_symbol_index(program, left->data.name);
+                Symbol l_symbol = get_symbol(program->symbol_table, left->data.name);
+                l_reg = l_symbol.unique_index;
+                l_value = l_symbol.value;
             } else {
-                compile_expr(program, left, l_reg);
+                l_value = compile_expr(program, left, l_reg);
             }
 
             if (right->type == EXPR_NAME) {
-                r_reg = get_symbol_index(program, right->data.name);
+                r_reg = get_symbol(program->symbol_table, right->data.name).unique_index;
             } else {
                 if (l_changed == 1) r_reg = next_free;
                 compile_expr(program, right, r_reg);
             }
-            
+
             OpCode operation = opcode_for_op(expr->data.operation.op);
             if (operation == OP_VOID) {
                 fprintf(stderr, "Operation [%s] not implemented\n", expr->data.operation.op);
                 exit(1);
             }
 
-            printf("Using register: %d\n", reg_used);
+            // printf("Using register: %d\n", reg_used);
             
             emit_byte(program, operation);
             emit_byte(program, (uint8_t) reg_used);
             emit_byte(program, (uint8_t) l_reg);
             emit_byte(program, (uint8_t) r_reg);
 
-            break;
+            switch (operation) {
+                case OP_EQ:
+                case OP_NOTEQ:
+                case OP_LT:
+                case OP_GT:
+                case OP_LEQT:
+                case OP_GEQT:
+                    return Comp_BoolVal(0);
+
+                default:
+                    return l_value;
+            }
         }
 
         case EXPR_NUMBER: {
@@ -628,7 +690,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_qword(program, raw_bits);
             }
 
-            return EXPR_VAL_TYPE_NUMBER;
+            return Comp_NumVal(num_value);
         }
 
         case EXPR_STRING: {
@@ -647,7 +709,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             emit_byte(program, (uint8_t) reg_used);
             emit_byte(program, (uint8_t) const_pointer);
 
-            return EXPR_VAL_TYPE_STRING;
+            return Comp_StrVal(expr->data.name);
         }
 
         case EXPR_BOOL: {
@@ -658,7 +720,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             }
             emit_byte(program, (uint8_t) reg_used);
 
-            return EXPR_VAL_TYPE_BOOLEAN;
+            return Comp_BoolVal(expr->data.bool_val);
         }
 
         /*case EXPR_DICT: {
@@ -688,63 +750,170 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
             emit_byte(program, (uint8_t) reg_used);
             emit_byte(program, (uint8_t) 3);
 
-            break;
+            return Comp_NilVal;
         }
 
         case EXPR_ARRAY: { 
             int count = expr->data.array.count;
 
-            for (int i = 0; i < count; i++) {
-                Expression* statement = expr->data.array.elements[i];
-                if (i < count - 1) {
-                    Expression* next = expr->data.array.elements[i + 1];
-                    if (next->type != statement->type && statement->type != EXPR_NAME && next->type != EXPR_NAME) {
-                        const char* type1 = expr_type_to_str(statement);
-                        const char* type2 = expr_type_to_str(next);
-                        const char str[] = "Compilation aborted, reason:\n\033[1;31m[Compile Error]:\033[0m Array types don't match.\n> [%d]: %s\n> [%d]: %s\n";
-                        char buf[256];
-                        snprintf(buf, sizeof(buf), str, i, type1, i+1, type2);
+            Expression** elements = expr->data.array.elements;
+            ExprValueType current_type = EXPR_VAL_TYPE_NIL;
 
-                        debug_printerr(buf);
-                        exit(1);
+            int is_str_array = 0;
+            if (elements[0]->type == EXPR_STRING) is_str_array = 1;
+            else if (elements[0]->type == EXPR_NAME) {
+                Symbol* defined_symbol = find_symbol(program->symbol_table, elements[0]->data.name);
+                if (defined_symbol->value.type == EXPR_VAL_TYPE_STRING) is_str_array = 1;
+            }
+
+            if (count > 10 || is_str_array) {
+                Constant** const_elements_array = malloc(sizeof(Constant) * count);
+                Constant array_val = {
+                    .as.array.elements = const_elements_array, 
+                    .as.array.count = count,
+                    .type = N_CONST_ARRAY,
+                };
+
+                if (const_elements_array == NULL) {
+                    debug_printerr("Could not allocate array constant, malloc failed");
+                    exit(1);
+                };
+
+                for (int i = 0; i < count; i++) {
+                    switch (elements[i]->type) {
+                        case EXPR_NAME: {
+                            Symbol val = get_symbol(program->symbol_table, elements[i]->data.name);
+                            //const_elements_array[i] = Register_Const(val.unique_index);
+                            Constant* const_val = malloc(sizeof(Constant));
+                            const_val->type = N_CONST_RUNTIME_REG;
+                            const_val->as.const_ref = val.unique_index;
+                            const_elements_array[i] = const_val;
+                            break;
+                        }
+                        case EXPR_NUMBER: {
+                            Constant* const_val = malloc(sizeof(Constant));
+                            const_val->type = N_CONST_NUMBER;
+                            const_val->as.number = elements[i]->data.value;
+                            const_elements_array[i] = const_val; //Num_Const(elements[i]->data.value); //(Constant) {.type = N_CONST_NUMBER, .as.number =  };
+                            break;
+                        }
+                        case EXPR_BOOL: {
+                            Constant* const_val = malloc(sizeof(Constant));
+                            const_val->type = N_CONST_BOOL;
+                            const_val->as.boolean = elements[i]->data.bool_val;
+                            const_elements_array[i] = const_val;
+                            //const_elements_array[i] = Bool_Const(elements[i]->data.bool_val);
+                            break;
+                        }
+                        case EXPR_STRING: {
+                            int str_idx = get_str_constant(program, elements[i]->data.name);
+                            if (str_idx == -1) {
+                                Constant new_const = Str_Const(elements[i]->data.name);
+                                str_idx = push_constant(program, new_const);
+                            } 
+
+                            Constant* const_val = malloc(sizeof(Constant));
+                            const_val->type = N_CONST_STR_REF;
+                            const_val->as.const_ref = str_idx;
+                            const_elements_array[i] = const_val;//StrRef_Const(str_idx);
+                            
+                            break;
+                        }
                     }
                 }
 
-                compile_expr(program, statement, reg_used + i);
-            }
-            
-            emit_byte(program, OP_PUSH_ARRAY);
-            emit_byte(program, (uint8_t) reg_used);
-            emit_dword(program, count);
+                int arr_idx = push_constant(program, array_val);
 
-            break;
+                emit_byte(program, OP_LOAD_CONST);
+                emit_byte(program, (uint8_t) reg_used);
+                emit_byte(program, (uint8_t) arr_idx);
+
+            } else {
+                for (int i = 0; i < count; i++) {
+                    Expression* statement = expr->data.array.elements[i];
+                    SymbolValue new_type = compile_expr(program, statement, reg_used + i);
+                    
+                    if (current_type != EXPR_VAL_TYPE_NIL && (new_type.type != current_type)) {
+                        const char* type1 = expr_val_to_str((int) new_type.type);
+                        const char* type2 = expr_val_to_str((int) current_type);
+                        const char str[] = "Compilation aborted, reason:\n\033[1;31m[Compile Error]\033[0m: Array types don't match.\n> [%d]: %s\n> [%d]: %s\n";
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), str, i-1, type2, i, type1);
+                        debug_printerr(buf);
+                        exit(1);
+                    }
+
+                    current_type = new_type.type;
+                }
+                
+                emit_byte(program, OP_PUSH_ARRAY);
+                emit_byte(program, (uint8_t) reg_used);
+                emit_dword(program, count);
+            }
+
+            return Comp_ArrayVal(current_type, count);
+        }
+
+        case EXPR_INDEX: {
+            Expression* target = expr->data.index_expr.target;
+            Expression* index = expr->data.index_expr.index;
+
+            Symbol target_symbol = get_symbol(program->symbol_table, target->data.name);
+            if (target_symbol.value.type == EXPR_VAL_TYPE_ARRAY) {
+                double index_val = index->data.value;
+
+                if (abs(index_val) > 255) {
+                    emit_byte(program, OP_LOAD_INDEX);
+                    emit_byte(program, reg_used);
+                    emit_byte(program, (uint8_t) target_symbol.unique_index);
+                    emit_dword(program, (int) index_val);
+                } else {
+                    emit_byte(program, OP_LOAD_FIELD);
+                    emit_byte(program, reg_used);
+                    emit_byte(program, (uint8_t) target_symbol.unique_index);
+                    emit_byte(program, (uint8_t) index_val);
+                }
+
+                return (SymbolValue) { .type = target_symbol.value.value.array_val.arr_type, .value.is_nil = 0 };
+            } else if (target_symbol.value.type == EXPR_VAL_TYPE_DICT) {
+                return Comp_NilVal;
+            }
+
+            const char str[] = "Compilation aborted, reason:\n\033[1;31m[Compile Error]\033[0m: Cannot index into [%s], it is of type %s.\n";
+            char buf[256];
+            snprintf(buf, sizeof(buf), str, target->data.name, expr_val_to_str((int) target_symbol.value.type));
+            debug_printerr(buf);
+            exit(1);
         }
 
         case EXPR_NAME: {
-            uint16_t symbol_index = get_symbol_index(program, expr->data.name);
+            const char* var_name = expr->data.name;
+            Symbol symbol = get_symbol(program->symbol_table, var_name);
             emit_byte(program, OP_LOAD_LOCAL);
             emit_byte(program, (uint8_t) reg_used);
-            emit_byte(program, (uint8_t) symbol_index);
+            emit_byte(program, (uint8_t) symbol.unique_index);
 
-            break;
+            debug_print_formatted("name [%s] referenced, type %d\n", var_name, (int) symbol.value.type);
+
+            return symbol.value;
         }
 
         case EXPR_DEFINE: {
             Expression* def_body = expr->data.define_body;
             Expression* assign_name = def_body->data.assign.name;
-            int symbol_index = push_symbol(program, assign_name->data.name);
-            // printf("Symbol index is: %d\n", symbol_index);
+            Symbol* entry = push_symbol_entry(program, assign_name->data.name);
 
-            compile_expr(program, def_body, symbol_index);
+            SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
+            entry->value = defined_value;
 
-            break;
+            return defined_value;//break;
         }
 
         case EXPR_ASSIGN: {
             Expression* assign_value = expr->data.assign.value;
             const char* assign_name = expr->data.assign.name->data.name;
             // uint16_t stored_symbol_index = get_symbol_index(program, assign_name);
-            compile_expr(program, assign_value, reg_used);
+            SymbolValue assigned_value = compile_expr(program, assign_value, reg_used);
             
             //debug_print_formatted("Expression:");
             // display_expression(assign_value);
@@ -753,7 +922,7 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_byte(program, (uint8_t) stored_symbol_index);
             }*/
 
-            break;
+            return assigned_value;//break;
         }
 
         default: {
@@ -764,6 +933,45 @@ ExprValueType compile_expr(Program* program, Expression* expr, int reg_used) {
 
             break;
         }
+    }
+
+    return Comp_NilVal;
+}
+
+int write_constant_to_file(Constant constant_saved, FILE* file) {
+    fwrite(&constant_saved.type, sizeof(uint8_t), 1, file);
+        
+    if (constant_saved.type == N_CONST_STRING) {
+        uint32_t length = (uint32_t) strlen(constant_saved.as.string);
+        fwrite(&length, sizeof(length), 1, file);
+        fwrite(constant_saved.as.string, sizeof(char), length, file);  
+        // debug_print("Written STR to constants!\n");    
+
+    } else if (constant_saved.type == N_CONST_BOOL) {
+        uint8_t value = (uint8_t) constant_saved.as.boolean;
+        fwrite(&value, sizeof(value), 1, file);
+        // debug_print("Written BOOL to constants!\n");
+    
+    } else if (constant_saved.type == N_CONST_NUMBER) {
+        double value = (double) constant_saved.as.number;
+        fwrite(&value, sizeof(value), 1, file);
+        //debug_print("Written NUM to constants!\n");
+
+    } else if (constant_saved.type == N_CONST_RUNTIME_REG || constant_saved.type == N_CONST_STR_REF) {
+        uint8_t value = (uint8_t) constant_saved.as.const_ref;
+        fwrite(&value, sizeof(value), 1, file);
+        //debug_print("Written REF to constants!\n");
+
+    } else if (constant_saved.type == N_CONST_ARRAY) {
+        uint32_t length = (uint32_t) constant_saved.as.array.count;
+        fwrite(&length, sizeof(length), 1, file);
+
+        for (int i = 0; i < constant_saved.as.array.count; i++) {
+            Constant* element = (Constant*) constant_saved.as.array.elements[i];
+            write_constant_to_file(*element, file);
+        }
+
+        //debug_print("Written ARRAY to constants!\n"); 
     }
 }
 
@@ -810,13 +1018,7 @@ int write_to_file(const char* output, Program* program) {
 
     for (int i = 0; i < program->constant_counter; i++) {
         Constant constant_saved = program->constants[i];
-        fwrite(&constant_saved.type, sizeof(uint8_t), 1, file);
-        
-        if (constant_saved.type == N_CONST_STRING) {
-            uint32_t length = (uint32_t) strlen(constant_saved.as.string);
-            fwrite(&length, sizeof(length), 1, file);
-            fwrite(constant_saved.as.string, sizeof(char), length, file);            
-        }
+        write_constant_to_file(constant_saved, file);
     }
 
     for (int i = 0; i < function_count; i++) {
@@ -943,10 +1145,10 @@ void print_program_bytecode(const char* compiled_input) {
 }
 
 void load_natives() {
-    global_functions.symbols[0] = DEF_NATIVE_FN("print", 0);
-    global_functions.symbols[1] = DEF_NATIVE_FN("len", 1);
+    global_symbols.symbols[0] = Def_Native_Function("print", 0);
+    // global_symbols.symbols[1] = DEF_NATIVE_FN("len", 1);
 
-    global_functions.count = 2;
+    global_symbols.count = 1;
 }
 
 int compile_program(const char* file_name, const char* output, int see_bytecode) {

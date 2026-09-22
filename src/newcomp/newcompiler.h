@@ -23,14 +23,22 @@ typedef enum {
     N_CONST_ARRAY = 4,
     N_CONST_DICT = 5,
     N_CONST_CLASS = 6,
+    N_CONST_STR_REF = 7,
+    N_CONST_RUNTIME_REG = 8,
 } ConstantType;
 
-typedef struct {
+typedef struct Constant {
     uint8_t type;
     union {
+        int const_ref;
         double number;
         int8_t boolean;
         char* string;
+
+        struct {
+            struct Constant** elements;
+            int count;
+        } array;
 
         struct {
             uint8_t* bytes;
@@ -76,16 +84,47 @@ typedef enum {
     OP_DICT_SET = 0x1D,
     OP_NEW_STRUCT = 0x1E,
     OP_LOAD_FIELD = 0x1F,
+    OP_LOAD_INDEX = 0x20,
 } OpCode;
+
+typedef struct SymbolValue {
+    ExprValueType type;
+    union {
+        uint8_t is_nil;
+        uint8_t bool_val;
+        const char* str_val;
+        double num_val;
+        struct {
+            ExprValueType arr_type;
+            int count;
+        } array_val;
+    } value;
+} SymbolValue;
 
 typedef struct {
     const char* name;
     int index;
     int unique_index;
-    ConstantType type;
+    uint8_t global;
+    SymbolValue value;
 } Symbol;
 
-#define DEF_NATIVE_FN(fn_name, idx) (Symbol){.index = idx, .name = fn_name, .unique_index = idx, .type = N_CONST_FUNCTION }
+#define Comp_StrVal(p_str_val) (SymbolValue){ .type = EXPR_VAL_TYPE_STRING, .value.str_val = p_str_val}
+#define Comp_NilVal (SymbolValue){ .type = EXPR_VAL_TYPE_NIL, }
+#define Comp_NumVal(p_num_val) (SymbolValue){ .type = EXPR_VAL_TYPE_NUMBER, .value.num_val = p_num_val}
+#define Comp_ArrayVal(p_arr_type, p_arr_count) (SymbolValue){.type = EXPR_VAL_TYPE_ARRAY, .value.array_val.arr_type = p_arr_type, .value.array_val.count = p_arr_count}
+#define Comp_BoolVal(p_bool_val) (SymbolValue){ .type = EXPR_VAL_TYPE_BOOLEAN, .value.bool_val = p_bool_val }
+
+
+#define Def_Native_Lib(lib_name, idx) (Symbol){.index = idx, .name = lib_name, .unique_index = idx, .value.type = EXPR_VAL_TYPE_DICT, .global = 1 }
+#define Def_Native_Function(fn_name, idx) (Symbol){.index = idx, .name = fn_name, .unique_index = idx, .value.type = EXPR_VAL_TYPE_FUNCTION, .global = 1 }
+
+#define Str_Const(p_str_val) (Constant){.as.string = p_str_val, .type = N_CONST_STRING}
+/*#define StrRef_Const(p_index_string) (Constant){.as.const_ref = p_index_string, .type = N_CONST_STR_REF}
+#define Num_Const(p_num_val) (Constant){.as.number = p_num_val, .type = N_CONST_NUMBER}
+#define Bool_Const(p_bool_val) (Constant){.as.boolean = p_bool_val, .type = N_CONST_BOOL}
+#define Register_Const(p_reg_val) (Constant){.as.number = p_reg_val, .type = N_CONST_RUNTIME_REG}*/
+
 
 typedef struct SymbolTable {
     Symbol symbols[MAX_SYMBOL_COUNT];

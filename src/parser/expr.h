@@ -11,6 +11,9 @@ typedef enum {
     EXPR_VAL_TYPE_ARRAY,
     EXPR_VAL_TYPE_CLASS,
     EXPR_VAL_TYPE_ENUM,
+    EXPR_VAL_TYPE_RANGE,
+    EXPR_VAL_TYPE_NIL,
+    EXPR_VAL_TYPE_FUNCTION,
 } ExprValueType;
 
 typedef enum {
@@ -21,6 +24,7 @@ typedef enum {
     EXPR_BOOL,
     EXPR_ARRAY,
     EXPR_STRING,
+    EXPR_NIL,
     EXPR_DICT,
     EXPR_BINARY_OPERATOR,
     EXPR_STATEMENT_END, 

@@ -42,6 +42,23 @@ const char* expr_type_to_str(Expression* expr) {
     return "NaN";
 }
 
+
+const char* expr_val_to_str(int val_type) {
+    switch (val_type) {
+        case EXPR_VAL_TYPE_ARRAY: return "array";
+        case EXPR_VAL_TYPE_BOOLEAN: return "bool";
+        case EXPR_VAL_TYPE_NUMBER: return "number";
+        case EXPR_VAL_TYPE_STRING: return "string";
+        case EXPR_VAL_TYPE_DICT: return "dict";
+        case EXPR_VAL_TYPE_NIL: return "nil";
+        case EXPR_VAL_TYPE_RANGE: return "range";
+        default: break;
+    }
+
+    return "NaN";
+}
+
+
 void print_opcode(uint8_t op) {
     switch (op) {
         case OP_VOID:
@@ -134,6 +151,9 @@ void print_opcode(uint8_t op) {
         case OP_PUSH_ARRAY:
             printf("> PUSH_ARR ");
             break;
+        case OP_LOAD_INDEX:
+            printf("> LOAD_INDEX ");
+            break;
         default:
             printf("> UNKNOWN\n");
             break;
@@ -191,7 +211,16 @@ void print_bytes(uint8_t* bytes, int total) {
             uint8_t reg_ref = bytes[++i];
             uint8_t idx = bytes[++i];
             printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, idx);
-
+        
+        } else if (byte_up == OP_LOAD_INDEX) {
+            uint8_t reg_dest = bytes[++i];
+            uint8_t reg_ref = bytes[++i];
+            int b1 = bytes[++i];
+            int b2 = bytes[++i];
+            int b3 = bytes[++i];
+            int b4 = bytes[++i];
+            printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, (b1 | b2 << 8 | b3 << 16 | b4 << 24)); 
+        
         } else if (byte_up == OP_JUMP) {
             int32_t byte1 = bytes[++i];
             int32_t byte2 = bytes[++i];

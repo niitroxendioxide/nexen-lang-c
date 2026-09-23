@@ -206,21 +206,13 @@ void print_bytes(uint8_t* bytes, int total) {
             uint8_t size = bytes[++i];
             printf("R%d, %d\n", reg, size);
 
-        } else if (byte_up == OP_LOAD_FIELD) {
+        } else if (byte_up == OP_LOAD_FIELD || byte_up == OP_LOAD_INDEX) {
             uint8_t reg_dest = bytes[++i];
             uint8_t reg_ref = bytes[++i];
             uint8_t idx = bytes[++i];
-            printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, idx);
-        
-        } else if (byte_up == OP_LOAD_INDEX) {
-            uint8_t reg_dest = bytes[++i];
-            uint8_t reg_ref = bytes[++i];
-            int b1 = bytes[++i];
-            int b2 = bytes[++i];
-            int b3 = bytes[++i];
-            int b4 = bytes[++i];
-            printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, (b1 | b2 << 8 | b3 << 16 | b4 << 24)); 
-        
+            if (byte_up == OP_LOAD_FIELD) printf("R%d, R%d, [%d]\n", reg_dest, reg_ref, idx);
+            else printf("R%d, R%d, R%d\n", reg_dest, reg_ref, idx);
+
         } else if (byte_up == OP_JUMP) {
             int32_t byte1 = bytes[++i];
             int32_t byte2 = bytes[++i];

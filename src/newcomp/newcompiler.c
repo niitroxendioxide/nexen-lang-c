@@ -860,20 +860,23 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
             Symbol target_symbol = get_symbol(program->symbol_table, target->data.name);
             if (target_symbol.value.type == EXPR_VAL_TYPE_ARRAY) {
-                double index_val = index->data.value;
-
-                if (abs(index_val) > 255) {
+                if (index->type == EXPR_NAME) {
+                    int free_reg = get_total_active_registers(program);
+                    compile_expr(program, index, free_reg);
+                    
                     emit_byte(program, OP_LOAD_INDEX);
                     emit_byte(program, reg_used);
                     emit_byte(program, (uint8_t) target_symbol.unique_index);
-                    emit_dword(program, (int) index_val);
+                    emit_byte(program, (uint8_t) free_reg);
                 } else {
+                    int indexed_value = index->data.value;
                     emit_byte(program, OP_LOAD_FIELD);
                     emit_byte(program, reg_used);
                     emit_byte(program, (uint8_t) target_symbol.unique_index);
-                    emit_byte(program, (uint8_t) index_val);
+                    emit_byte(program, (uint8_t) indexed_value);
                 }
 
+                
                 return (SymbolValue) { .type = target_symbol.value.value.array_val.arr_type, .value.is_nil = 0 };
             } else if (target_symbol.value.type == EXPR_VAL_TYPE_DICT) {
                 return Comp_NilVal;

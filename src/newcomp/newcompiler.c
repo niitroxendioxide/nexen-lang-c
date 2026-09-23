@@ -496,6 +496,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* body = expr->data.loop_for.body;
             Expression* looping = expr->data.loop_for.looping;
             
+            push_scope(program);
             compile_expr(program, variable, -1);
             
             int loop_reg = get_total_active_registers(program);
@@ -547,6 +548,8 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_dword(program, diff);
                 free_registers(program, 2);
             }
+
+            pop_scope(program);
 
             return Comp_NilVal;
         }
@@ -916,7 +919,12 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* assign_value = expr->data.assign.value;
             const char* assign_name = expr->data.assign.name->data.name;
             // uint16_t stored_symbol_index = get_symbol_index(program, assign_name);
-            SymbolValue assigned_value = compile_expr(program, assign_value, reg_used);
+            Symbol* symbolfound = find_symbol(program->symbol_table, assign_name);
+            if (symbolfound == NULL) {
+                exit(1);
+            }
+
+            SymbolValue assigned_value = compile_expr(program, assign_value, symbolfound->unique_index);
             
             //debug_print_formatted("Expression:");
             // display_expression(assign_value);

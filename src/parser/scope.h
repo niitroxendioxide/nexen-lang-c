@@ -5,11 +5,12 @@
 
 typedef struct Scope {
     Stack bindings;
+    struct Scope* module;
     struct Scope* parent;
 } Scope;
 
 void display_value(const char* name, Value value);
-Scope* create_scope(Scope* parent);
+Scope* create_scope(Scope* parent, Scope* module);
 Binding* lookup_in_scope(Scope* scope, const char* name);
 void push_to_scope(Scope* scope, const char* name, Value value);
 void free_scope(Scope* scope);

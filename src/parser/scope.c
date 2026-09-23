@@ -22,7 +22,7 @@ void display_value(const char* name, Value value) {
     }
 }
 
-Scope* create_scope(Scope* parent) {
+Scope* create_scope(Scope* parent, Scope* module) {
     Scope* scope = malloc(sizeof(Scope));
     if (scope == NULL) {
         fprintf(stderr, "malloc failed for scope\n");
@@ -33,6 +33,7 @@ Scope* create_scope(Scope* parent) {
     scope->bindings.count = 0;
     scope->bindings.capacity = 0;
     scope->parent = parent;
+    scope->module = module;
 
     return scope;
 }

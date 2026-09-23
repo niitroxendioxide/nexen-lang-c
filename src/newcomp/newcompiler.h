@@ -10,9 +10,9 @@
 #define MAX_SYMBOL_COUNT 256
 #define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
-#define LANG_MAJOR_VER 1
-#define LANG_MINOR_VER 1
-#define LANG_PATCH_VER 4
+#define LANG_MAJOR_VER 0
+#define LANG_MINOR_VER 0
+#define LANG_PATCH_VER 5
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {

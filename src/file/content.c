@@ -3,6 +3,7 @@
 char* get_file_contents(const char* file_source, size_t* file_size) {
     FILE *file = fopen(file_source, "r");
     if (file == NULL) {
+        fprintf(stderr, "file handle null.\n");
         return NULL;
     }
 
@@ -11,6 +12,7 @@ char* get_file_contents(const char* file_source, size_t* file_size) {
     
     long size = ftell(file);
     if (size < 0) {
+        fprintf(stderr, "file size less than zero.\n");
         fclose(file);
         return NULL; 
     }
@@ -19,6 +21,7 @@ char* get_file_contents(const char* file_source, size_t* file_size) {
 
     char *content = malloc(size + 1);
     if (content == NULL) {
+        fprintf(stderr, "file contents null.\n");
         fclose(file);
         return NULL;
     }

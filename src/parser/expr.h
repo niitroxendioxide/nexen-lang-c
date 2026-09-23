@@ -2,6 +2,7 @@
 #define EXPR_H
 
 #include "parser/tokens.h"
+#include <stdint.h>
 
 typedef enum {
     EXPR_VAL_TYPE_NUMBER,
@@ -37,12 +38,16 @@ typedef enum {
     EXPR_WHILE_LOOP,
     EXPR_FOR_LOOP,
     EXPR_RANGE,
+    EXPR_IMPORT,
+    EXPR_EXPORT,
 } ExprType;
 
 typedef struct Expression {
     ExprType type;
     ExprValueType data_type;
+    uint8_t is_exporting;
     union {
+        struct Expression* export;
         struct Expression* define_body;
         struct {
             struct Expression* name;
@@ -80,7 +85,8 @@ typedef struct Expression {
         struct {
             struct Expression* target;
             struct Expression* index;
-            int is_method_call;
+            uint8_t is_method_call;
+            uint8_t is_mod_call;
         } index_expr;
 
         struct {
@@ -136,6 +142,12 @@ Expression* parse_value(
 Expression* parse_block(
     Token* tokens, 
     int* pos, 
+    size_t token_count
+);
+
+Expression* parse_token(
+    Token* tokens,
+    int* pos,
     size_t token_count
 );
 

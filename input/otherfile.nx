@@ -1,0 +1,3 @@
+export fn show(a) {
+    print("Showing:", a);
+};

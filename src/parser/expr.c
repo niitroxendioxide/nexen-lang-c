@@ -8,10 +8,11 @@ BindingPower operator_binding_power(const char* op) {
     if (strcmp(op, "=") == 0)  return (BindingPower){0.1f, 0.2f};
     if (strcmp(op, "||") == 0) return (BindingPower){0.3f, 0.4f};
     if (strcmp(op, "&&") == 0) return (BindingPower){0.5f, 0.6f};
-    if (strcmp(op, "..") == 0 || strcmp(op, "..=") == 0) return (BindingPower){3.0f, 3.1f};
     if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return (BindingPower){0.7f, 0.8f};
     if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return (BindingPower){1.0f, 1.1f};
     if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return (BindingPower){2.0f, 2.1f};
+    if (strcmp(op, "..") == 0 || strcmp(op, "..=") == 0) return (BindingPower){3.0f, 3.1f};
+    if (strcmp(op, "::") == 0) return (BindingPower){3.5f, 3.6f};
     if (strcmp(op, ".") == 0 || strcmp(op, "[") == 0) return (BindingPower){4.0f, 4.1f};
     if (strcmp(op, "<") == 0 || strcmp(op, ">") == 0 ||
         strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0) return (BindingPower){0.9f, 1.0f};
@@ -350,14 +351,20 @@ Expression* parse_function_def(Token* tokens, int* pos, size_t token_count) {
         exit(1);
     }
 
+    
     Expression* fn_def = malloc(sizeof(Expression));
     fn_def->type = EXPR_FUNCTION_DEF;
     fn_def->data.function_def.name = name;
     fn_def->data.function_def.param_names = param_names;
     fn_def->data.function_def.param_count = param_count;
     fn_def->data.function_def.body = body;
-
-    return fn_def;
+    
+    Expression* define_expr = malloc(sizeof(Expression));
+    define_expr->type = EXPR_DEFINE;
+    define_expr->data_type = EXPR_VAL_TYPE_FUNCTION;
+    define_expr->data.define_body = fn_def;
+    
+    return define_expr;
 }
 
 Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
@@ -387,8 +394,12 @@ Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
             index_node->data.index_expr.is_method_call = 0;
 
             expr = index_node;
-        } else if (tokens[*pos].type == TOKEN_OP && (strcmp(tokens[*pos].data.op_val, ".") == 0 || strcmp(tokens[*pos].data.op_val, ":") == 0)) {
-            int is_method_call = strcmp(tokens[*pos].data.op_val, ":") == 0;
+        } else if (tokens[*pos].type == TOKEN_OP && 
+            (strcmp(tokens[*pos].data.op_val, ".") == 0 || strcmp(tokens[*pos].data.op_val, ":") == 0 
+            || strcmp(tokens[*pos].data.op_val, "::") == 0)
+        ) {
+            uint8_t is_mod_call = (uint8_t) strcmp(tokens[*pos].data.op_val, "::") == 0;
+            uint8_t is_method_call = (uint8_t) strcmp(tokens[*pos].data.op_val, ":") == 0;
             (*pos)++;
 
             if (tokens[*pos].type != TOKEN_NAME) {
@@ -404,6 +415,7 @@ Expression* parse_postfix(Token* tokens, int* pos, size_t token_count) {
             Expression* index_node = malloc(sizeof(Expression));
             index_node->type = EXPR_INDEX;
             index_node->data.index_expr.is_method_call = is_method_call;
+            index_node->data.index_expr.is_mod_call = is_mod_call;
             index_node->data.index_expr.target = expr;
             index_node->data.index_expr.index = field_name;
             expr = index_node;
@@ -548,6 +560,33 @@ Expression* parse_if(Token* tokens, int* pos, size_t token_count) {
     return if_expression;
 }
 
+Expression* parse_inexport(Token* tokens, int* pos, size_t token_count) {
+    int is_export = strcmp(tokens[*pos].data.str_val, "export") == 0;
+    (*pos)++;
+
+    Expression* ioport = malloc(sizeof(Expression));
+    if (ioport == NULL) return NULL;
+
+    if (is_export) {
+        ioport->type = EXPR_EXPORT;
+        
+        Expression* exporting = parse_token(tokens, pos, token_count);
+        if (exporting == NULL) return NULL;
+        exporting->is_exporting = 1;
+        ioport->data.export = exporting;
+    } else {
+        ioport->type = EXPR_IMPORT;
+        
+        Expression* assign_body = parse_assignment(tokens, pos, token_count);
+        if (assign_body == NULL) return NULL;
+        ioport->data.define_body = assign_body;
+    }
+
+    // display_expression(ioport);
+
+    return ioport;
+}
+
 Expression* parse_loop(Token* tokens, int* pos, size_t token_count) {
     int is_for = strcmp(tokens[*pos].data.str_val, "for") == 0;
     (*pos)++; // to consume either while/for
@@ -651,6 +690,8 @@ Expression* parse_token(Token* tokens, int* pos, size_t token_count) {
         new_expression->data.define_body = define_body;
 
         return new_expression;
+    } else if (strcmp(current->data.str_val, "export") == 0 || strcmp(current->data.str_val, "import") == 0) {
+        return parse_inexport(tokens, pos, token_count);
     } else if (strcmp(current->data.str_val, "if") == 0) {
         return parse_if(tokens, pos, token_count);
     } else if (strcmp(current->data.str_val, "while") == 0 || strcmp(current->data.str_val, "for") == 0) {
@@ -729,14 +770,14 @@ Expression** parse_statements(Token* tokens, size_t token_count, int* current_to
                 exit(1);
             }
 
-            if (new_expression->type != EXPR_IF && new_expression->type != EXPR_FUNCTION_DEF && new_expression->type != EXPR_FOR_LOOP && new_expression->type != EXPR_WHILE_LOOP) {
-                if (tokens[*current_token_pos].type == TOKEN_STATEMENT_END) {
-                   (*current_token_pos)++;
-                } else {
+            //if (new_expression->type != EXPR_IF && new_expression->type != EXPR_FUNCTION_DEF && new_expression->type != EXPR_FOR_LOOP && new_expression->type != EXPR_WHILE_LOOP) {
+            if (tokens[*current_token_pos].type == TOKEN_STATEMENT_END) {
+                (*current_token_pos)++;
+            } /*else {
                     fprintf(stderr, "Exiting on lack of token statement end. Expression type: %d\n\033[1;31m[Warning]\033[0m: make sure to add support if the statement should continue without ';'\n", new_expression->type);
                     exit(1);
-                }
-            } 
+                }*/
+            //} 
 
             expression_list[current_expression] = new_expression;
             current_expression++;
@@ -844,6 +885,18 @@ void display_expression(Expression* expr) {
             } else {
                 fprintf(stderr, "<complex expression>\n"); 
             }
+            break;
+        }
+        case EXPR_IMPORT: {
+            const char* name = expr->data.define_body->data.assign.name->data.name;
+            const char* file = expr->data.define_body->data.assign.value->data.name;
+
+            fprintf(stderr, "Import <Expr>: %s -> %s\n", file, name);
+            break;
+        }
+        case EXPR_EXPORT: {
+            fprintf(stderr, "Export <Expr>: ");
+            display_expression(expr->data.export);
             break;
         }
         case EXPR_BINARY_OPERATOR: {

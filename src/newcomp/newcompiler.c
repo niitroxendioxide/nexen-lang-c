@@ -495,14 +495,104 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* variable = expr->data.loop_for.variable;
             Expression* body = expr->data.loop_for.body;
             Expression* looping = expr->data.loop_for.looping;
+
+            const char* loop_idx_symbol = variable->data.define_body->data.assign.name->data.name;
             
             push_scope(program);
-            compile_expr(program, variable, -1);
-            
-            int loop_reg = get_total_active_registers(program);
-            if (looping->type == EXPR_RANGE) {
-                const char* loop_idx_symbol = variable->data.define_body->data.assign.name->data.name;
-                // debug_print("compiling range!");
+            if (looping->type == EXPR_NAME) {
+                Symbol found = get_symbol(program->symbol_table, looping->data.name);
+                if (found.value.type != EXPR_VAL_TYPE_ARRAY) {
+                    debug_printerr("Cannot loop through non-array value");
+                    exit(1);
+                }
+
+                Expression* start = malloc(sizeof(Expression));
+                start->type = EXPR_NUMBER;
+                start->data.value = 0;
+
+                Expression* end = malloc(sizeof(Expression));
+                end->type = EXPR_NUMBER;
+                end->data.value = found.value.value.array_val.count;
+
+                Expression* len_array = malloc(sizeof(Expression));
+                len_array->type = EXPR_RANGE;
+                len_array->data.range.start = start;
+                len_array->data.range.end = end;
+                len_array->data.range.included = 0;
+
+                int symbol_reg = get_total_active_registers(program);
+                // display_expression(variable);
+                compile_expr(program, variable, symbol_reg);
+
+                //display_expression(len_array);
+
+                int var_reg = get_total_active_registers(program);
+                // printf("putting variable at: %d\n", var_reg);
+                emit_byte(program, OP_PUSH_U8);
+                emit_byte(program, var_reg);
+                emit_byte(program, 0);
+
+                reserve_registers(program, 1);
+
+                int loop_reg = get_total_active_registers(program);
+                compile_expr(program, len_array, loop_reg);
+
+                int jump_reg = loop_reg + 1;
+                // int symbol_reg = get_symbol_index(program, loop_idx_symbol);
+
+                reserve_registers(program, 2);
+
+                /* pasted */
+                int condition_ptr = program->byte_counter;
+                emit_byte(program, OP_LOAD_FIELD);
+                emit_byte(program, jump_reg);
+                emit_byte(program, loop_reg);
+                emit_byte(program, (uint8_t) 1); 
+
+                emit_byte(program, OP_LT);
+                emit_byte(program, jump_reg);
+                emit_byte(program, var_reg);
+                emit_byte(program, jump_reg);
+
+                emit_byte(program, OP_JUMP_IF_FALSE);
+                emit_byte(program, jump_reg);
+
+                int jump_dest_ptr = program->byte_counter;
+                emit_dword(program, 0x0);
+                int block_start = program->byte_counter;
+
+                emit_byte(program, OP_LOAD_INDEX);
+                emit_byte(program, symbol_reg);
+                emit_byte(program, (uint8_t) found.unique_index);
+                emit_byte(program, var_reg);
+
+                compile_expr(program, body, jump_reg + 1);
+
+                emit_byte(program, OP_PUSH_U8);
+                int free_reg = get_total_active_registers(program);
+                emit_byte(program, free_reg);
+                emit_byte(program, (uint8_t) 1);
+
+                emit_byte(program, OP_ADD);
+                emit_byte(program, var_reg);
+                emit_byte(program, var_reg);
+                emit_byte(program, (uint8_t) free_reg);
+
+                int body_ended_ptr = program->byte_counter;
+                int body_size = (body_ended_ptr - block_start) + 5;
+                override_dword(program, body_size, jump_dest_ptr);
+
+                int diff = (condition_ptr - (body_ended_ptr + 5));
+                emit_byte(program, OP_JUMP);
+                emit_dword(program, diff);
+                free_registers(program, 3);
+
+                /**/
+            } else if (looping->type == EXPR_RANGE) {
+                compile_expr(program, variable, -1);
+
+                int loop_reg = get_total_active_registers(program);
+                
 
                 compile_expr(program, looping, loop_reg);
                 int jump_reg = loop_reg + 1;

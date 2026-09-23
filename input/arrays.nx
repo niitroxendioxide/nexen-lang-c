@@ -1,6 +1,6 @@
-let array1 = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
-let varA = 0;
-for i in 1..16 {
-    varA = array1[i] + varA;
+let list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+let sum = 0;
+for i in list {
+    sum = sum + i;
 }
-print(varA);
+print(sum);

@@ -573,7 +573,18 @@ Expression* parse_loop(Token* tokens, int* pos, size_t token_count) {
 
         assign_body->type = EXPR_ASSIGN;
         assign_body->data.assign.name = var_name;
-        assign_body->data.assign.value = looped->data.range.start;
+        if (looped->type == EXPR_RANGE) {
+            assign_body->data.assign.value = looped->data.range.start;
+        } else if (looped->type == EXPR_NAME) {
+            Expression* zero = malloc(sizeof(Expression));
+            zero->data.value = 0;
+            zero->type = EXPR_NUMBER;
+
+            assign_body->data.assign.value = zero;
+        } else {
+            printf("Cannot initialize variable from non-zero.");
+            exit(1);
+        }
 
         variable_assignment->type = EXPR_DEFINE;
         variable_assignment->data.define_body = assign_body;
@@ -777,7 +788,7 @@ void display_expression(Expression* expr) {
             if (start->type == EXPR_NAME) {
                 fprintf(stderr, "%s..", start->data.name);
             } else if (start->type == EXPR_NUMBER) {
-                fprintf(stderr, "%f..", start->data.value);
+                fprintf(stderr, "%d..", (int) start->data.value);
             } else {
                 fprintf(stderr, "<complex expression>.."); 
             }
@@ -785,7 +796,7 @@ void display_expression(Expression* expr) {
             if (end->type == EXPR_NAME) {
                 fprintf(stderr, "%s\n", end->data.name);
             } else if (end->type == EXPR_NUMBER) {
-                fprintf(stderr, "%f\n", end->data.value);
+                fprintf(stderr, "%d\n", (int) end->data.value);
             } else {
                 fprintf(stderr, "<complex expression>\n"); 
             }

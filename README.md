@@ -29,7 +29,13 @@ as there's currently no validation on the source or extension (you can compile a
 
 
 # Example code
-```nx
+```rs
+/*
+    Since github has no syntax highlighting for the language rn, rust is used as example.
+    This is an example assumming you have a module 'data' with:
+
+    export let exchange_rate = 0; //[any number here]
+*/
 import data = "data"
 
 let rate = data::exchange_rate;
@@ -40,7 +46,6 @@ fn calculate_usd_to_rate(usd_count) {
 let prices = [82, 16, 37.5];
 for val in prices {
     let converted = calculate_usd_to_rate(val);
-    print(val, "$US =", converted, " $EXAMPLE");
+    print(val, "$US =", converted, "$EX");
 }
-
 ```

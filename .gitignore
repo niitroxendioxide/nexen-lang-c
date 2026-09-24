@@ -9,3 +9,4 @@ guide.md
 *.nxo
 *.exe
 exam.c
+/input/

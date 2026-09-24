@@ -32,7 +32,10 @@ int run_interpreter(const char* file_name, int show_tokens, int show_elapsed_tim
 
     int current_token_pointer = 0;
     Expression** expressions = parse_statements(my_tokens, token_count, &current_token_pointer, &statement_count);
-    Scope* program_scope = create_scope(NULL, NULL);
+    Scope* program_scope = create_scope(NULL);
+    program_scope->file_path = strdup(file_name);
+
+    // printf("scope file at: %s\n", (char*) program_scope->file_path);
 
     inject_native_libraries(program_scope);
 

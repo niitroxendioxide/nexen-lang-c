@@ -2,7 +2,7 @@
 #include "newcomp/debugger.h"
 #include <string.h>
 
-static SymbolTable global_symbols = {
+static SymbolTable native_symbols = {
     .count = 0,
     .symbols = {},
     .parent = NULL,
@@ -82,16 +82,13 @@ int get_symbol_from_table(SymbolTable* table, const char* symbol) {
         return get_symbol_from_table(table->parent, symbol);
     }
 
-    char buf[128];
-    snprintf(buf, sizeof(buf), "Symbol %s not defined", symbol);
-    debug_printerr(buf);
-    exit(1);
+    return -1;
 }
 
 int get_function_index(Program* program, const char* func_name) {
-    debug_print_formatted("Program has: %d functions", program->func_count);
+    //debug_print_formatted("Program has: %d functions", program->func_count);
     for (int i = 0; i < program->func_count; i++) {
-        debug_print_formatted("> %s == %s?", program->functions[i]->name, func_name);
+        // debug_print_formatted("> %s == %s?", program->functions[i]->name, func_name);
         if (strcmp(program->functions[i]->name, func_name) == 0) {
             return i;
         }
@@ -116,8 +113,8 @@ Symbol* find_symbol(SymbolTable* table, const char* symbol) {
         return find_symbol(table->parent, symbol);
     }
 
-    if (table != &global_symbols) {
-        return find_symbol(&global_symbols, symbol);
+    if (table != &native_symbols) {
+        return find_symbol(&native_symbols, symbol);
     }
 
     return NULL;
@@ -135,8 +132,38 @@ Symbol get_symbol(SymbolTable* table, const char* symbol) {
     return *found;
 }
 
+Symbol get_symbol_or_glob(Program* program, const char* symbol) {
+    Symbol* found = find_symbol(program->symbol_table, symbol);
+    if (found == NULL) {
+        Program* cur = program;
+        while (cur->enclosing != NULL) cur = cur->enclosing;
+
+        found = find_symbol(cur->globals, symbol);
+
+        if (found == NULL) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "GLOB Symbol %s not defined", symbol);
+            debug_printerr(buf);
+            exit(1);
+        }
+    }
+
+    return *found;
+}
+
 int get_symbol_index(Program* program, const char* symbol) {
-    return get_symbol_from_table(program->symbol_table, symbol);
+    int res = get_symbol_from_table(program->symbol_table, symbol);
+    if (res == -1) {
+        res = get_symbol_from_table(program->globals, symbol);
+        if (res == -1) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "Symbol %s not defined", symbol);
+            debug_printerr(buf);
+            exit(1);
+        }
+    }
+
+    return res;
 }
 
 int get_total_active_registers(Program* program) {
@@ -149,36 +176,47 @@ int get_total_active_registers(Program* program) {
     return total + program->reserved_registers; 
 }
 
-Symbol* push_symbol_entry(Program* program, const char* symbol) {
-    if (program->symbol_table->count >= MAX_SYMBOL_COUNT) {
+Symbol* push_symbol_entry(Program* program, const char* symbol, int global) {
+    SymbolTable* table = program->symbol_table;
+    if (global == 1) {
+        table = program->globals;
+    }
+
+    if (table->count >= MAX_SYMBOL_COUNT) {
         fprintf(stderr, "Program exceeded the maximum amount of symbols\n");
         exit(1);
     }
 
-    for (int i = 0; i < program->symbol_table->count; i++) {
-        if (strcmp(program->symbol_table->symbols[i].name, symbol) == 0) {
+    for (int i = 0; i < table->count; i++) {
+        if (strcmp(table->symbols[i].name, symbol) == 0) {
             fprintf(stderr, "Redefining existing symbol %s\n", symbol);
             exit(1);
         }
     }
 
+    
     Symbol new_symbol = {
         .name = symbol,
-        .index = program->symbol_table->count,
+        .index = table->count,
         .unique_index = program->index_counter,
+        .global = (uint8_t) global,
         .value = Comp_NilVal,
     };
-
-    int slot = program->symbol_table->count;
-    program->symbol_table->symbols[slot] = new_symbol;
-    program->symbol_table->count++;
+    
+    int slot = table->count;
+    table->symbols[slot] = new_symbol;
+    table->count++;
     program->index_counter++;
-
-    return &program->symbol_table->symbols[slot];
+    
+    return &table->symbols[slot];
 }
 
 int push_symbol(Program* program, const char* symbol) {
-    return push_symbol_entry(program, symbol)->unique_index;
+    return push_symbol_entry(program, symbol, 0)->unique_index;
+}
+
+int push_global(Program* program, const char* symbol) {
+    return push_symbol_entry(program, symbol, 1)->unique_index;
 }
 
 void push_scope(Program* program) {
@@ -274,22 +312,31 @@ void reserve_registers(Program* program, int amount) {
 
 
 /* initializing program & scopes */
-Program* init_program() {
+Program* init_program(const char* source_file) {
     Program* new_program = malloc(sizeof(Program));
     new_program->constant_counter = 0;
     new_program->byte_counter = 0;
     new_program->constant_limit = 10;
     new_program->byte_limit = 10;
+    new_program->module_count = 0;
+    new_program->modules_capacity = 10;
     new_program->index_counter = 0;
     new_program->enclosing = NULL;
+    new_program->is_main = 1;
     new_program->reserved_registers = 0;
     new_program->constants = malloc(new_program->constant_limit * sizeof(Constant));
     new_program->bytes = malloc(new_program->byte_limit * sizeof(uint8_t));
     new_program->symbol_table = malloc(sizeof(SymbolTable));
     new_program->symbol_table->count = 0;
     new_program->symbol_table->parent = NULL;
+    new_program->globals = malloc(sizeof(SymbolTable));
+    new_program->globals->count = 0;
+    new_program->globals->parent = NULL;
     new_program->func_count = 0;
+    new_program->file_source = strdup(source_file);
     new_program->func_limit = 10;
+    
+    new_program->modules = malloc(sizeof(CompiledModule) * new_program->modules_capacity);
     new_program->functions = malloc(sizeof(Function) * new_program->func_limit);
  
     if (new_program->constants == NULL || new_program->bytes == NULL || new_program->symbol_table == NULL || new_program->functions == NULL) {
@@ -314,8 +361,9 @@ Program* enclose_program(Program* current, const char* fn_name) {
     current->func_count++;
 
     // 
-    Program* new_program = init_program();
+    Program* new_program = init_program(current->file_source);
     new_program->enclosing = current;
+
 
     return new_program;
 }
@@ -329,7 +377,7 @@ Program* write_to_functions(Program* current, int argc, int fn_idx) {
 
     
     Function* new_func = parent->functions[fn_idx];
-    debug_print_formatted("wrote to function: %s. with len: %d", new_func->name, current->byte_counter);
+    // debug_print_formatted("wrote to function: %s. with len: %d", new_func->name, current->byte_counter);
     
     uint8_t reg_count = current->symbol_table->count;
     //new_func->name = func_name;
@@ -384,6 +432,126 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
     if (expr == NULL) return Comp_NilVal;
 
     switch (expr->type) {
+        case EXPR_EXPORT: {
+            if (program->enclosing != NULL) {
+                err_print_format("Compile time error.\n\033[1;31m> [Not Allowed]\033[0m: Cannot export from non-global scope");
+                exit(1);
+            }
+            expr->data.export->is_exporting = 1;
+
+            compile_expr(program, expr->data.export, reg_used);
+
+            //debug_print_formatted("Exported of type: %d\n", (int) val.type);
+            // int exported_register = get_total_active_registers(program);
+
+            break;
+        }
+        case EXPR_IMPORT: {
+            const char* var_name = expr->data.define_body->data.assign.name->data.name;
+            Expression* val = expr->data.define_body->data.assign.value;
+
+            if (val->type != EXPR_STRING) {
+                err_print_format("Compile time error raised\n\033[1;31m> [Not Allowed]\033[0m: Dynamic module loading not allowed.");
+                exit(1);
+            }
+
+            int mod_loaded_reg = reg_used > 0 ? reg_used : get_total_active_registers(program);
+            const char* file_name_src = import_into_glob(program->file_source, val->data.name);
+            ParsedProgram* parsed_program = parse_file_expressions(file_name_src);
+
+            int is_broken = 0;
+            for (int i = 0; i < program->module_count; i++) {
+                CompiledModule* existing_module = program->modules[i];
+                //debug_print_formatted("Already existing module %s is at index: %d", existing_module->module_path, i);
+                if (strcmp(existing_module->module_path, file_name_src) == 0) {
+                    emit_byte(program, OP_LOAD_MOD);
+                    emit_byte(program, mod_loaded_reg);
+                    emit_dword(program, i);
+                    is_broken = 1;
+                    break;
+                }
+            }
+            if (is_broken) break;
+
+            CompiledModule* comp_module = malloc(sizeof(CompiledModule));
+            if (comp_module == NULL) {
+                err_print_format("No more memory.");
+                exit(1);
+            };
+
+            if (program->module_count + 1 >= program->modules_capacity) {
+                program->modules_capacity *= 2;
+                program->modules = realloc(program->modules, sizeof(CompiledModule) * program->modules_capacity);
+                if (program->modules == NULL) {
+                    err_print_format("No more memory.");
+                    exit(1);
+                }
+            }
+
+            comp_module->module_path = file_name_src;
+            comp_module->state = MOD_COMPILING;
+            
+            Program* new_module = init_program(file_name_src);
+            new_module->is_main = 0;
+
+            //debug_print_formatted("Compiling module: %s as %s", file_name_src, var_name);
+            for (int i = 0; i < parsed_program->expression_count; i++) {
+                Expression* expr = parsed_program->expressions[i];
+                compile_expr(new_module, expr, -1);
+                free(expr);
+            }
+
+            // print_compiled_program(new_module);
+
+            // debug_print_formatted("Program has %d symbols", new_module->globals->count);
+            SymbolTable* exports = &comp_module->exports;
+            for (int i = 0; i < new_module->globals->count; i++) {
+                Symbol symbol = new_module->globals->symbols[i];
+                // printf("symbol exported?: %s\n", symbol.value.is_exported == 1 ? "yes" : "no");
+                if (symbol.value.is_exported) {
+                    exports->symbols[exports->count++] = symbol;
+                }
+            }
+
+            for (int i = 0; i < exports->count; i++) {
+                Symbol exported_symbol = exports->symbols[i];
+                debug_print_formatted(
+                    "exported symbol \033[1;32m\"%s\"\033[0m from module \033[1;35m\"%s\"\033[0m", 
+                    exported_symbol.name, 
+                    file_name_src
+                );
+            }
+
+            for (int i = 0; i < new_module->constant_counter; i++) {
+                Constant val = new_module->constants[i];
+                push_constant(program, val);
+            }
+
+            free(new_module->constants); // should work fine, i think
+
+            for (int i = 0; i < new_module->module_count; i++) {
+                int mod_idx = program->module_count++;
+                program->modules[mod_idx] = new_module->modules[i];
+            }
+
+
+            int mod_idx = program->module_count++;
+            comp_module->module_program = new_module;
+            program->modules[mod_idx] = comp_module;
+
+            Symbol* module_symbol = push_symbol_entry(program, var_name, 0);
+            module_symbol->value = (SymbolValue){ .type = EXPR_VAL_TYPE_MODULE, .value.module.symbols = exports };
+
+            print_compiled_program(new_module);
+            //debug_print_formatted("Final program has %d module(s).", program->module_count);
+
+            emit_byte(program, OP_LOAD_MOD);
+            emit_byte(program, mod_loaded_reg);
+            emit_dword(program, mod_idx);
+
+            break;
+        }
+
         case EXPR_BLOCK: {
             //emit_byte(program, OP_PUSH_SCOPE);
             push_scope(program);
@@ -444,6 +612,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
         case EXPR_FUNCTION_DEF: {
             const char* fn_name = strdup(expr->data.function_def.name);
+            // debug_print_formatted("function written! %s", fn_name);
             program = enclose_program(program, fn_name);
             int program_fn_idx = program->enclosing->func_count - 1;
 
@@ -459,10 +628,9 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 Expression* body_expr = f_body->data.block.statements[i_e];
                 compile_expr(program, body_expr, -1);
             }
-
             program = write_to_functions(program, param_count, program_fn_idx);
 
-            return Comp_NilVal;
+            return (SymbolValue){.type = EXPR_VAL_TYPE_FUNCTION, .value.str_val = fn_name };
         }
 
         case EXPR_WHILE_LOOP: {
@@ -500,7 +668,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             
             push_scope(program);
             if (looping->type == EXPR_NAME) {
-                Symbol found = get_symbol(program->symbol_table, looping->data.name);
+                Symbol found = get_symbol_or_glob(program, looping->data.name);
                 if (found.value.type != EXPR_VAL_TYPE_ARRAY) {
                     debug_printerr("Cannot loop through non-array value");
                     exit(1);
@@ -658,10 +826,11 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
         case EXPR_FN_CALL: {
             Expression* calle = expr->data.call.callee;
             int is_method = calle->type == EXPR_INDEX && calle->data.index_expr.is_method_call;
+            int is_mod = calle->type == EXPR_INDEX && calle->data.index_expr.is_mod_call;
 
-            if (!is_method) {
+            if (!is_method && !is_mod) {
                 const char* call_name = calle->data.name;
-                debug_print_formatted("Calling function: %s", call_name);
+                // debug_print_formatted("Calling function: %s", call_name);
 
                 int base_register = reg_used;
                 if (base_register == -1) {
@@ -670,9 +839,9 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
                 int is_global = -1;
                 int func_index = get_function_index(program, call_name);
-                debug_print_formatted("function index: %d", func_index);
+                //debug_print_formatted("function index: %d", func_index);
                 if (func_index == -1) {
-                    Symbol* global_symbol = find_symbol(&global_symbols, call_name);
+                    Symbol* global_symbol = find_symbol(&native_symbols, call_name);
                     if (global_symbol != NULL && global_symbol->global == 1 && global_symbol->value.type == EXPR_VAL_TYPE_FUNCTION) {
                         is_global = global_symbol->unique_index;
                     } else {
@@ -684,7 +853,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                     }
                 }
 
-                debug_print_formatted("compiling argument pushing. starting at reg: %d", reg_used);
+                //debug_print_formatted("compiling argument pushing. starting at reg: %d", reg_used);
                 int argc = expr->data.call.argument_count;
                 for (int i = 0; i < argc; i++) {
                     Expression* arg = expr->data.call.arguments[i];
@@ -702,7 +871,29 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                     emit_dword(program, func_index);
                 }
 
-                debug_print("function call written.");
+                //debug_print("function call written.");
+            } else if (is_mod) {
+                //debug_print_formatted("Compiling mod fn call!");
+
+                int calling_reg = get_total_active_registers(program);
+                SymbolValue symbol_val = compile_expr(program, calle, calling_reg);
+                if (symbol_val.type != EXPR_VAL_TYPE_FUNCTION) {
+                    err_print_format(
+                        "Attempted to call %s::%s as function.", 
+                        calle->data.index_expr.target->data.name,
+                        calle->data.index_expr.index->data.name
+                    );
+                    exit(1);
+                }
+
+                int argc = expr->data.call.argument_count;
+                for (int i = 0; i < argc; i++) {
+                    Expression* arg = expr->data.call.arguments[i];
+                    compile_expr(program, arg, calling_reg + i);
+                }
+
+                emit_byte(program, OP_CALL_REG);
+                emit_byte(program, (uint8_t) calling_reg);
             }
 
             return Comp_NilVal;
@@ -719,16 +910,25 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             SymbolValue l_value;
 
             if (left->type == EXPR_NAME) {
-                l_changed = 1;
-                Symbol l_symbol = get_symbol(program->symbol_table, left->data.name);
-                l_reg = l_symbol.unique_index;
-                l_value = l_symbol.value;
+                Symbol l_symbol = get_symbol_or_glob(program, left->data.name);
+                if (l_symbol.global) {
+                    compile_expr(program, left, l_reg);
+                } else {
+                    l_changed = 1;
+                    l_reg = l_symbol.unique_index;
+                    l_value = l_symbol.value;
+                }
             } else {
                 l_value = compile_expr(program, left, l_reg);
             }
 
             if (right->type == EXPR_NAME) {
-                r_reg = get_symbol(program->symbol_table, right->data.name).unique_index;
+                Symbol r_symbol = get_symbol_or_glob(program, right->data.name);
+                if (r_symbol.global) {
+                    compile_expr(program, right, r_reg);
+                } else {
+                    r_reg = r_symbol.unique_index;
+                }
             } else {
                 if (l_changed == 1) r_reg = next_free;
                 compile_expr(program, right, r_reg);
@@ -763,7 +963,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
         case EXPR_NUMBER: {
             double num_value = expr->data.value;
-            debug_print_formatted("Expression number: %d", num_value);
+            // debug_print_formatted("Expression number: %f", num_value);
 
             int is_int = (floor(num_value) == num_value);
             if (abs(num_value) < 255 && is_int) {
@@ -950,6 +1150,25 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
         case EXPR_INDEX: {
             Expression* target = expr->data.index_expr.target;
             Expression* index = expr->data.index_expr.index;
+            int is_mod_call = expr->data.index_expr.is_mod_call;
+
+            if (is_mod_call) {
+                const char* mod_name = target->data.name;
+                const char* indexed_name = index->data.name;
+                
+                Symbol mod_symbol = get_symbol(program->symbol_table, mod_name);
+                Symbol index = get_symbol(mod_symbol.value.value.module.symbols, indexed_name);
+
+                emit_byte(program, OP_LOAD_FIELD);
+                emit_byte(program, reg_used);
+                emit_byte(program, (uint8_t) mod_symbol.unique_index);
+                emit_byte(program, index.unique_index);
+
+                debug_print_formatted("Loading %s::%s", mod_name, indexed_name);
+                //exit(1);
+
+                return index.value;
+            }
 
             Symbol target_symbol = get_symbol(program->symbol_table, target->data.name);
             if (target_symbol.value.type == EXPR_VAL_TYPE_ARRAY) {
@@ -984,25 +1203,61 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
         case EXPR_NAME: {
             const char* var_name = expr->data.name;
-            Symbol symbol = get_symbol(program->symbol_table, var_name);
-            emit_byte(program, OP_LOAD_LOCAL);
-            emit_byte(program, (uint8_t) reg_used);
-            emit_byte(program, (uint8_t) symbol.unique_index);
+            Symbol symbol = get_symbol_or_glob(program, var_name);
+            /*if (symbol_ref == NULL)
+            {
+                symbol_ref = find_symbol(program->globals, var_name);
+                if (symbol_ref == NULL) {
+                    /*err_print_format("Compilation aborted.\033[1;31m> [Compile Error]\033[0m: Cannot find \"%s\"", var_name);
+                    exit(1);
+                }
+            }*/
+            
 
-            debug_print_formatted("name [%s] referenced, type %d\n", var_name, (int) symbol.value.type);
+            if (symbol.global) {
+                emit_byte(program, OP_LOAD_GLOB);
+                emit_byte(program, (uint8_t) reg_used);
+                emit_byte(program, (uint8_t) symbol.unique_index);
+            } else {
+                emit_byte(program, OP_LOAD_LOCAL);
+                emit_byte(program, (uint8_t) reg_used);
+                emit_byte(program, (uint8_t) symbol.unique_index);
+            }
+
+            // debug_print_formatted("name [%s] referenced, type %d\n", var_name, (int) symbol.value.type);
 
             return symbol.value;
         }
 
         case EXPR_DEFINE: {
+            // display_expression(expr);
             Expression* def_body = expr->data.define_body;
-            Expression* assign_name = def_body->data.assign.name;
-            Symbol* entry = push_symbol_entry(program, assign_name->data.name);
+            int is_global = program->enclosing == NULL && program->is_main == 0;
+            debug_print_formatted("is global? %s", is_global == 1 ? "yes" : "no");
+            if (def_body->type == EXPR_ASSIGN) {
+                Expression* assign_name = def_body->data.assign.name;
+                Symbol* entry = push_symbol_entry(program, assign_name->data.name, is_global);
+                SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
+                defined_value.is_exported = expr->is_exporting;
+                entry->value = defined_value;
 
-            SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
-            entry->value = defined_value;
 
-            return defined_value;//break;
+                return defined_value;//
+            } else if (def_body->type == EXPR_FUNCTION_DEF) {
+                const char* fn_name = def_body->data.function_def.name;
+                //debug_print_formatted("writing fn: %s", fn_name);
+                Symbol* entry = push_symbol_entry(program, fn_name, is_global);
+                //debug_print_formatted("symbol idx: %d, symbol name: %s", entry->unique_index, entry->name);
+
+                
+                SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
+                defined_value.is_exported = expr->is_exporting;
+                // printf("func defined type: %d\n", (int) defined_value.type);
+                entry->value = defined_value;
+                return defined_value;
+            }
+
+            break;
         }
 
         case EXPR_ASSIGN: {
@@ -1011,7 +1266,11 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             // uint16_t stored_symbol_index = get_symbol_index(program, assign_name);
             Symbol* symbolfound = find_symbol(program->symbol_table, assign_name);
             if (symbolfound == NULL) {
-                exit(1);
+                symbolfound = find_symbol(program->globals, assign_name);
+                if (symbolfound == NULL) {
+                    debug_print_formatted("Symbol [%s] undefined.", assign_name);
+                    exit(1);
+                }
             }
 
             SymbolValue assigned_value = compile_expr(program, assign_value, symbolfound->unique_index);
@@ -1076,6 +1335,54 @@ int write_constant_to_file(Constant constant_saved, FILE* file) {
     }
 }
 
+int write_function_to_file(Function* fn_saved, FILE* file) {
+    uint8_t tag = N_CONST_FUNCTION;
+    fwrite(&tag, sizeof(uint8_t), 1, file);
+    fwrite(&fn_saved->length, sizeof(int), 1, file);
+    fwrite(&fn_saved->arg_count, sizeof(uint8_t), 1, file);
+    fwrite(&fn_saved->reg_count, sizeof(uint8_t), 1, file);
+    fwrite(fn_saved->bytes, sizeof(uint8_t), fn_saved->length, file);
+}
+
+/*
+    notes for when i make the vm:
+
+
+    * use a 'module-context' variable for when you load module parts, that way when you do
+    "load_glob r0, 1" it grabs the module-context and looks for the register 1. that way
+    we can keep exporting external and values inaccessible from outer scopes.
+*/
+
+int write_module_to_file(CompiledModule* module, FILE* file) {
+    uint8_t mod_type = (uint8_t) N_CONST_MODULE;
+    fwrite(&mod_type, sizeof(uint8_t), 1, file);
+
+    Program* mod_prog = module->module_program;
+
+    /* writing like a program */
+    uint8_t exported = (uint8_t) module->exports.count;
+    uint32_t module_size = (uint32_t) mod_prog->byte_counter;
+    uint32_t func_count = (uint32_t) mod_prog->func_count;
+
+    fwrite(&exported, sizeof(exported), 1, file);
+    fwrite(&module_size, sizeof(module_size), 1, file);
+    fwrite(&func_count, sizeof(func_count), 1, file);
+    debug_print_formatted("Writing module with %d functions and %d exports.", func_count, exported);
+
+    for (uint8_t field_idx = 0; field_idx < exported; field_idx++) {//module->exports.symbols->unique_index;
+        uint8_t reg_referenced = module->exports.symbols[(int) field_idx].unique_index;
+        debug_print_formatted("Export id %d is actually referencing Reg%d", field_idx, reg_referenced);
+        fwrite(&field_idx, sizeof(field_idx), 1, file);
+        fwrite(&reg_referenced, sizeof(reg_referenced), 1, file);
+    }
+
+    for (int i = 0; i < func_count; i++) {
+        write_function_to_file(mod_prog->functions[i], file);
+    }
+
+    fwrite(mod_prog->bytes, sizeof(uint8_t), mod_prog->byte_counter, file);
+}
+
 int write_to_file(const char* output, Program* program) {
     if (program->byte_counter <= 0 && program->func_count <= 0) {
         fprintf(stderr, "Rejected file output, cannot write with empty program.\n");
@@ -1092,6 +1399,7 @@ int write_to_file(const char* output, Program* program) {
     uint32_t constant_count = (uint32_t) program->constant_counter;
     uint32_t function_count = (uint32_t) program->func_count;
     uint8_t registers_used = (uint8_t) program->symbol_table->count;
+    uint32_t modules_compiled = (uint32_t) program->module_count;
 
     size_t filename_len = strlen(output) + 4 + 1;
     char* output_file = malloc(filename_len);
@@ -1116,6 +1424,7 @@ int write_to_file(const char* output, Program* program) {
     fwrite(&constant_count, sizeof(constant_count), 1, file);
     fwrite(&function_count, sizeof(function_count), 1, file);
     fwrite(&registers_used, sizeof(registers_used), 1, file);
+    fwrite(&modules_compiled, sizeof(modules_compiled), 1, file);
 
     for (int i = 0; i < program->constant_counter; i++) {
         Constant constant_saved = program->constants[i];
@@ -1124,12 +1433,12 @@ int write_to_file(const char* output, Program* program) {
 
     for (int i = 0; i < function_count; i++) {
         Function* func_saved = program->functions[i];
-        uint8_t tag = N_CONST_FUNCTION;
-        fwrite(&tag, sizeof(uint8_t), 1, file);
-        fwrite(&func_saved->length, sizeof(int), 1, file);
-        fwrite(&func_saved->arg_count, sizeof(uint8_t), 1, file);
-        fwrite(&func_saved->reg_count, sizeof(uint8_t), 1, file);
-        fwrite(func_saved->bytes, sizeof(uint8_t), func_saved->length, file);
+        write_function_to_file(func_saved, file);
+    }
+
+    for (int i = 0; i < modules_compiled; i++) {
+        CompiledModule* mod_saved = program->modules[i];
+        write_module_to_file(mod_saved, file);
     }
 
     fwrite(&language_begin, sizeof(language_begin), 1, file);
@@ -1154,6 +1463,12 @@ Program* load_program_from_binary(const char* file_contents, size_t file_size) {
     uint16_t version_major = *(uint16_t*)&file_contents[curptr];  curptr += sizeof(uint16_t);
     uint16_t version_minor = *(uint16_t*)&file_contents[curptr];  curptr += sizeof(uint16_t);
     uint16_t version_patch = *(uint16_t*)&file_contents[curptr];  curptr += sizeof(uint16_t);
+
+    if (!(version_major == 0 && version_minor == 0 && version_patch == 12000)) {
+        fprintf(stderr, "Cannot open this binary as it is of an unsupported version.");
+        exit(1);
+        return NULL;
+    }
 
     uint32_t program_size   = *(uint32_t*)&file_contents[curptr]; curptr += sizeof(uint32_t);
     uint32_t constant_count = *(uint32_t*)&file_contents[curptr]; curptr += sizeof(uint32_t);
@@ -1246,10 +1561,10 @@ void print_program_bytecode(const char* compiled_input) {
 }
 
 void load_natives() {
-    global_symbols.symbols[0] = Def_Native_Function("print", 0);
+    native_symbols.symbols[0] = Def_Native_Function("print", 0);
     // global_symbols.symbols[1] = DEF_NATIVE_FN("len", 1);
 
-    global_symbols.count = 1;
+    native_symbols.count = 1;
 }
 
 int compile_program(const char* file_name, const char* output, int see_bytecode) {
@@ -1261,7 +1576,7 @@ int compile_program(const char* file_name, const char* output, int see_bytecode)
     }
 
     load_natives();
-    Program* program_result = init_program();
+    Program* program_result = init_program(file_name);
     for (int expr_idx = 0; expr_idx < program_expressions->expression_count; expr_idx++) {
         Expression* expr = program_expressions->expressions[expr_idx];
         compile_expr(program_result, expr, -1);

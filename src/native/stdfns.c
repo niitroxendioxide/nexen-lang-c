@@ -39,6 +39,10 @@ Value native_print(Value* args, size_t arg_count) {
                 printf("undefined"); 
                 break;
             }
+            case VALUE_FUNCTION: {
+                printf("function");
+                break;
+            }
             default: {
                 printf("<unprintable [type=%d]>", args[i].type); 
                 break;

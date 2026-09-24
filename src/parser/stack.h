@@ -38,7 +38,10 @@ typedef struct Value {
             size_t capacity;
         } array_val;
 
-        struct Scope* module_scope;
+        struct {
+            struct Scope* scope;
+            char* str_path;
+        } module;
 
         struct {
             double end;

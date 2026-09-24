@@ -810,15 +810,20 @@ void display_expression(Expression* expr) {
     switch (expr->type) {
         case EXPR_DEFINE: {
             Expression* body = expr->data.define_body;
-            Expression* value = body->data.assign.value;
+            if (body->type == EXPR_ASSIGN) {
+                Expression* value = body->data.assign.value;
 
-            fprintf(stderr, "Define <Expr>: %s = ", body->data.assign.name->data.name);
-            if (value->type == EXPR_NAME) {
-                fprintf(stderr, "%s\n", value->data.name);
-            } else if (value->type == EXPR_NUMBER) {
-                fprintf(stderr, "%f\n", value->data.value);
+                fprintf(stderr, "Define <Expr>: %s = ", body->data.assign.name->data.name);
+                if (value->type == EXPR_NAME) {
+                    fprintf(stderr, "%s\n", value->data.name);
+                } else if (value->type == EXPR_NUMBER) {
+                    fprintf(stderr, "%f\n", value->data.value);
+                } else {
+                    fprintf(stderr, "<complex expression>\n"); 
+                }
             } else {
-                fprintf(stderr, "<complex expression>\n"); 
+                fprintf(stderr, "Define <Expr>: %s = ", body->data.function_def.name);
+                display_expression(body);
             }
             break;
         }

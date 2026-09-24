@@ -127,7 +127,7 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
 
     size_t i = 0;
     while (i < input_len) {
-        if ((i + 1) < input_len && input[i] == '/') {
+        if ((i + 1) < input_len && input[i] == '/' && (input[i + 1] == '/' || input[i + 1] == '*')) {
             const char next = input[i + 1];
             if (next == '/') {
                 while (i < input_len && input[i] != '\n') {
@@ -250,7 +250,31 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
             tokens[count].type = TOKEN_NAME;
 
             size_t begin = i;
+            int has_period = 0;
             while (i < input_len) {
+                if ((input[i] == '_' || input[i] == '.') && isdigit(input[i-1]) == 1) {
+                    int is_period = input[i] == '.';
+                    if (is_period && has_period) {
+                        size_t word_length = i - begin;
+                        size_t mem_length = word_length + 1;
+                        char* word_memory = malloc(mem_length);
+                        if (word_memory != NULL) {
+                            memcpy(word_memory, input + begin, word_length);
+                            word_memory[word_length] = '\0';
+                        }
+
+                        fprintf(stderr, "malformed number %s\n.", word_memory);
+                        exit(1);
+                    }
+
+                    if (is_period) {
+                        has_period = 1;
+                    }
+
+                    i++;
+                    continue;
+                }
+
                 if (
                     isspace((unsigned char)input[i]) 
                     || is_operator(input[i]) 

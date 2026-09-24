@@ -15,6 +15,7 @@ char* bool_str(uint8_t flag) {
 
 Value apply_operator(char* op_code, Value left, Value right) {
     Value undefined_base = { .type = VALUE_UNDEFINED };
+    
     double left_val = left.as.num_val;
     double right_val = right.as.num_val;
 
@@ -137,7 +138,7 @@ Value index_into(Value accessed_value, Value index_value) {
         }
 
         case VALUE_MODULE: {
-            Scope* mod_scope = accessed_value.as.module_scope;
+            Scope* mod_scope = accessed_value.as.module.scope;
             Binding* binding_to_be_found = lookup_in_scope(mod_scope, index_value.as.str_val);
             // printf("found binding: %s, is exported?: %s\n", binding_to_be_found->name, bool_str(binding_to_be_found->value.is_exported));
             if (binding_to_be_found != NULL && binding_to_be_found->value.is_exported == 1) {
@@ -150,6 +151,17 @@ Value index_into(Value accessed_value, Value index_value) {
         default:
             return (Value){.type = VALUE_UNDEFINED};
     }
+}
+
+Binding* find_defined_module(Scope* scope, const char* file_name_stream) {
+    for (int i = 0; i < scope->bindings.count; i++) {
+        Binding* bind = &scope->bindings.bindings[i];
+        if (bind->value.type == VALUE_MODULE && strcmp(bind->value.as.module.str_path, file_name_stream) == 0) {
+            return bind;
+        }
+    }
+
+    return NULL;
 }
 
 int is_truthy(Value val) {
@@ -175,29 +187,37 @@ Value evaluate(Expression* expr, Scope* scope) {
         case EXPR_IMPORT: {
             const char* var_name = expr->data.define_body->data.assign.name->data.name;//evaluate(, scope);
             Value str_file = evaluate(expr->data.define_body->data.assign.value, scope);
-            char file_name_stream[1024];
-            snprintf(file_name_stream, strlen(str_file.as.str_val) + 4, "%s.nx", str_file.as.str_val);
+            char* file_name_stream = import_into_glob(scope->file_path, str_file.as.str_val);
+            Binding* predefined_module = find_defined_module(scope, file_name_stream);
+            if (predefined_module != NULL) {
+                // printf("Module was already defined as: %s\n", predefined_module->name);
+                push_to_scope(scope, var_name, predefined_module->value);
+                return predefined_module->value;
+            }
 
-            //printf("loading file: %s\n", file_name_stream);
+            //printf("loading module: %s\n", file_name_stream);
+            //snprintf(file_name_stream, strlen(str_file.as.str_val) + 4, "%s.nx", str_file.as.str_val);
+
             ParsedProgram* evaluate_program = parse_file_expressions(file_name_stream);
             if (evaluate_program == NULL) {
                 fprintf(stderr, "Could not file into memory, memory not enough.\n");
                 exit(1);
             }
-            // Value* list = malloc(sizeof(Value) * evaluate_program->expression_count);
 
-            Scope* mod_scope = create_scope(scope, NULL);
+            Scope* mod_scope = create_scope(scope);
             if (mod_scope == NULL) {
                 exit(1);
             };
 
-            Value module = (Value){ .type = VALUE_MODULE, .as.module_scope = mod_scope };
+            Value module = (Value){ .type = VALUE_MODULE, .as.module = {
+                .scope = mod_scope,
+                .str_path = file_name_stream,
+            } };
 
             for (int i = 0; i < evaluate_program->expression_count; i++) {
-                //display_expression(evaluate_program->expressions[i]);
                 Value imported_val = evaluate(evaluate_program->expressions[i], mod_scope);
             }
-            // printf("pushing to scope: %s\n", var_name);
+            
             push_to_scope(scope, var_name, module);
 
             return module;
@@ -249,8 +269,8 @@ Value evaluate(Expression* expr, Scope* scope) {
         // the let keyword
         case EXPR_DEFINE: {
             Expression* body = expr->data.define_body; 
-            Value result;
             char* var_name;
+            Value result;
             if (body->type == EXPR_ASSIGN) {
                 result = evaluate(body->data.assign.value, scope);
                 var_name = body->data.assign.name->data.name;
@@ -284,7 +304,7 @@ Value evaluate(Expression* expr, Scope* scope) {
         }
 
         case EXPR_BLOCK: {
-            Scope* sub_scope = create_scope(scope, NULL);
+            Scope* sub_scope = create_scope(scope);
 
             Value last = (Value){ .type = VALUE_UNDEFINED };
             for (int i = 0; i < expr->data.block.count; i++) {
@@ -417,8 +437,9 @@ Value evaluate(Expression* expr, Scope* scope) {
 
         case EXPR_INDEX: {
             Value index_value = evaluate(expr->data.index_expr.index, scope);
-            // printf("type of idx: %d, str_val: %s\n", (int) index_value.type, (char*) index_value.as.str_val);
             Value accessed_value = evaluate(expr->data.index_expr.target, scope);
+            printf("type of idx: %d, str_val: %s\n", (int) index_value.type, (char*) index_value.as.str_val);
+            printf("accessing module? %s\n", bool_str(accessed_value.type == VALUE_MODULE));
 
             return index_into(accessed_value, index_value);
         }
@@ -500,7 +521,7 @@ Value evaluate(Expression* expr, Scope* scope) {
                 exit(1);
             }
 
-            Scope* call_scope = create_scope(callee_val.as.func_val.closure, NULL);
+            Scope* call_scope = create_scope(callee_val.as.func_val.closure);
             for (size_t i = 0; i < total_arg_count; i++) {
                 push_to_scope(call_scope, def->data.function_def.param_names[i], arg_values[i]);
             }

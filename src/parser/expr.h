@@ -15,6 +15,7 @@ typedef enum {
     EXPR_VAL_TYPE_RANGE,
     EXPR_VAL_TYPE_NIL,
     EXPR_VAL_TYPE_FUNCTION,
+    EXPR_VAL_TYPE_MODULE,
 } ExprValueType;
 
 typedef enum {

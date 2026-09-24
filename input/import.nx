@@ -1,8 +1,0 @@
-import file = "input/otherfile"
-import data = "input/datafile"
-
-let printed_username = data::username
-file::show(printed_username)
-
-let attempt = data::hidden_user
-file::show(attempt)

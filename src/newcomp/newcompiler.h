@@ -11,8 +11,8 @@
 #define MAX_U16 1 << 16
 #define LANG_SIGNATURE 0x6E786F21
 #define LANG_MAJOR_VER 0
-#define LANG_MINOR_VER 0
-#define LANG_PATCH_VER 5
+#define LANG_MINOR_VER 1
+#define LANG_PATCH_VER 6
 #define LANGUAGE_BEGIN 0xFFFF
 
 typedef enum {
@@ -25,6 +25,7 @@ typedef enum {
     N_CONST_CLASS = 6,
     N_CONST_STR_REF = 7,
     N_CONST_RUNTIME_REG = 8,
+    N_CONST_MODULE = 9,
 } ConstantType;
 
 typedef struct Constant {
@@ -85,10 +86,20 @@ typedef enum {
     OP_NEW_STRUCT = 0x1E,
     OP_LOAD_FIELD = 0x1F,
     OP_LOAD_INDEX = 0x20,
+    OP_LOAD_GLOB = 0x21,
+    OP_LOAD_MOD = 0x22,
+    OP_CALL_REG = 0x23,
 } OpCode;
+
+typedef enum {
+    MOD_UNVISITED,
+    MOD_COMPILING,
+    MOD_LOADED,
+} ModuleLoadingState;
 
 typedef struct SymbolValue {
     ExprValueType type;
+    uint8_t is_exported;
     union {
         uint8_t is_nil;
         uint8_t bool_val;
@@ -98,6 +109,10 @@ typedef struct SymbolValue {
             ExprValueType arr_type;
             int count;
         } array_val;
+
+        struct {
+            struct SymbolTable* symbols;
+        } module;
     } value;
 } SymbolValue;
 
@@ -140,23 +155,37 @@ typedef struct Function {
     int length;
 } Function;
 
+typedef struct CompiledModule {
+    int module_idx;
+    const char* module_path;
+    SymbolTable exports;
+    ModuleLoadingState state;
+
+    struct Program* module_program;
+} CompiledModule;
+
 typedef struct Program {
     struct Program* enclosing;
 
     // allocated
+    CompiledModule** modules;
     Constant* constants;
     uint8_t* bytes;
+    SymbolTable* globals;
     SymbolTable* symbol_table;
     Function** functions;
-
-
+    
     // info
+    int module_count;
     int reserved_registers;
     int index_counter;
     int byte_limit;
     int func_limit;
     int func_count;
+    char* file_source;
     uint32_t byte_counter;
+    int modules_capacity;
+    int is_main;
 
     int constant_limit;
     uint32_t constant_counter;

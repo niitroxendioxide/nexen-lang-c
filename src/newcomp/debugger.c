@@ -29,6 +29,17 @@ void debug_print_formatted(const char* format, ...) {
     debug_print(buffer); 
 }
 
+void err_print_format(const char* format, ...) {
+    char buffer[512];
+    
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    
+    debug_printerr(buffer); 
+}
+
 const char* expr_type_to_str(Expression* expr) {
     switch (expr->type) {
         case EXPR_BOOL: return "bool";
@@ -87,6 +98,12 @@ void print_opcode(uint8_t op) {
             break;
         case OP_LOAD_LOCAL:
             printf("> LOAD_LOCAL ");
+            break;
+        case OP_LOAD_GLOB:
+            printf("> LOAD_GLOB ");
+            break;
+        case OP_LOAD_MOD:
+            printf("> LOAD_MOD ");
             break;
         case OP_NEW_STRUCT:
             printf("> NEW_STRUCT ");
@@ -151,6 +168,9 @@ void print_opcode(uint8_t op) {
         case OP_PUSH_ARRAY:
             printf("> PUSH_ARR ");
             break;
+        case OP_CALL_REG: 
+            printf("> CALL_REG ");
+            break;
         case OP_LOAD_INDEX:
             printf("> LOAD_INDEX ");
             break;
@@ -164,11 +184,11 @@ void print_bytes(uint8_t* bytes, int total) {
     for (int i = 0; i < total; i++) {
         uint8_t byte_up = bytes[i];
         print_opcode(byte_up);
-        if (byte_up == OP_STORE_LOCAL || byte_up == OP_PUSH_0 || byte_up == OP_PUSH_1 || byte_up == OP_RETURN) {
+        if (byte_up == OP_STORE_LOCAL || byte_up == OP_CALL_REG || byte_up == OP_PUSH_0 || byte_up == OP_PUSH_1 || byte_up == OP_RETURN) {
             const char* k = (bytes[i] == OP_LOAD_CONST) ? "K" : "R";
             printf("%s%d\n", k, bytes[++i]);
 
-        } else if (byte_up == OP_PUSH_U8 || byte_up == OP_LOAD_CONST || byte_up == OP_LOAD_LOCAL) {
+        } else if (byte_up == OP_PUSH_U8 || byte_up == OP_LOAD_CONST || byte_up == OP_LOAD_LOCAL || byte_up == OP_LOAD_GLOB) {
             uint8_t reg = bytes[++i];
             uint8_t val = bytes[++i];
             printf("R%d, %d\n", reg, val);
@@ -230,11 +250,17 @@ void print_bytes(uint8_t* bytes, int total) {
             int32_t value = byte1 | (byte2 << 8) | (byte3 << 16) | (byte4 << 24);
             printf("R%d, %d\n", (uint8_t) reg_compared, (int32_t) value);
 
+        } else if (byte_up == OP_LOAD_MOD) {
+            uint8_t reg = bytes[++i];
+            int value;
+            memcpy(&value, &bytes[i + 1], sizeof(int));
+            printf("R%d, %d\n", reg, value);
+            i += 4;
         } else if (byte_up == OP_PUSH_NUM) {
             uint8_t reg = bytes[++i];
             double value;
             memcpy(&value, &bytes[i + 1], sizeof(double));
-            printf("%f\n", value);
+            printf("R%d, %f\n", reg, value);
             i += 8;
 
         } else if (byte_up == OP_CALL_FN) {

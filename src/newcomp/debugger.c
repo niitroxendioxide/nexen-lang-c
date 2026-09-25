@@ -184,10 +184,14 @@ void print_bytes(uint8_t* bytes, int total) {
     for (int i = 0; i < total; i++) {
         uint8_t byte_up = bytes[i];
         print_opcode(byte_up);
-        if (byte_up == OP_STORE_LOCAL || byte_up == OP_CALL_REG || byte_up == OP_PUSH_0 || byte_up == OP_PUSH_1 || byte_up == OP_RETURN) {
+        if (byte_up == OP_STORE_LOCAL || byte_up == OP_PUSH_0 || byte_up == OP_PUSH_1 || byte_up == OP_RETURN) {
             const char* k = (bytes[i] == OP_LOAD_CONST) ? "K" : "R";
             printf("%s%d\n", k, bytes[++i]);
 
+        } else if (byte_up == OP_CALL_REG) {
+            uint8_t ret = bytes[++i];
+            uint8_t reg = bytes[++i];
+            printf("R%d, R%d\n", ret, reg);
         } else if (byte_up == OP_PUSH_U8 || byte_up == OP_LOAD_CONST || byte_up == OP_LOAD_LOCAL || byte_up == OP_LOAD_GLOB) {
             uint8_t reg = bytes[++i];
             uint8_t val = bytes[++i];

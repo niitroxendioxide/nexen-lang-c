@@ -509,17 +509,24 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 Symbol symbol = new_module->globals->symbols[i];
                 // printf("symbol exported?: %s\n", symbol.value.is_exported == 1 ? "yes" : "no");
                 if (symbol.value.is_exported) {
-                    exports->symbols[exports->count++] = symbol;
+                    int idx_correct = exports->count;
+                    symbol.index = idx_correct;
+                    symbol.unique_index = idx_correct;
+
+                    exports->symbols[idx_correct] = symbol;
+                    exports->count++;
+                    //exports->symbols[exports->count++].index = i;
+                    //exports->symbols[exports->count++].unique_index = i;
                 }
             }
 
             for (int i = 0; i < exports->count; i++) {
                 Symbol exported_symbol = exports->symbols[i];
-                debug_print_formatted(
+                /*debug_print_formatted(
                     "exported symbol \033[1;32m\"%s\"\033[0m from module \033[1;35m\"%s\"\033[0m", 
                     exported_symbol.name, 
                     file_name_src
-                );
+                );*/
             }
 
             for (int i = 0; i < new_module->constant_counter; i++) {
@@ -542,8 +549,10 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Symbol* module_symbol = push_symbol_entry(program, var_name, 0);
             module_symbol->value = (SymbolValue){ .type = EXPR_VAL_TYPE_MODULE, .value.module.symbols = exports };
 
-            print_compiled_program(new_module);
-            //debug_print_formatted("Final program has %d module(s).", program->module_count);
+            if (DEBUG_ACTIONS) {
+                debug_print_formatted("Final program has %d module(s). Module [%s] code:", program->module_count, file_name_src);
+                print_compiled_program(new_module);
+            }
 
             emit_byte(program, OP_LOAD_MOD);
             emit_byte(program, mod_loaded_reg);
@@ -889,10 +898,11 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 int argc = expr->data.call.argument_count;
                 for (int i = 0; i < argc; i++) {
                     Expression* arg = expr->data.call.arguments[i];
-                    compile_expr(program, arg, calling_reg + i);
+                    compile_expr(program, arg, calling_reg + i + 1);
                 }
 
                 emit_byte(program, OP_CALL_REG);
+                emit_byte(program, (uint8_t) reg_used);
                 emit_byte(program, (uint8_t) calling_reg);
             }
 
@@ -1158,11 +1168,12 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 
                 Symbol mod_symbol = get_symbol(program->symbol_table, mod_name);
                 Symbol index = get_symbol(mod_symbol.value.value.module.symbols, indexed_name);
+                // printf("accessing index: %d of module %s\n", (int) index.index, mod_name);
 
                 emit_byte(program, OP_LOAD_FIELD);
                 emit_byte(program, reg_used);
                 emit_byte(program, (uint8_t) mod_symbol.unique_index);
-                emit_byte(program, index.unique_index);
+                emit_byte(program, index.index);
 
                 debug_print_formatted("Loading %s::%s", mod_name, indexed_name);
                 //exit(1);

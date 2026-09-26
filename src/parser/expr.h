@@ -159,4 +159,8 @@ Expression** parse_statements(
     size_t* statement_count
 );
 
+#define NameExpr(given_var_name, p_expr_name) Expression* given_var_name = malloc(sizeof(Expression));\
+                                              given_var_name->type = EXPR_NAME;                       \
+                                              given_var_name->data.name = p_expr_name;                \
+
 #endif

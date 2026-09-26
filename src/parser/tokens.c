@@ -254,6 +254,11 @@ Token* tokenize(const char* input, size_t input_len, int* token_count) {
             while (i < input_len) {
                 if ((input[i] == '_' || input[i] == '.') && isdigit(input[i-1]) == 1) {
                     int is_period = input[i] == '.';
+                    int is_range = i + 1 < input_len && input[i] == '.' && input[i + 1] == '.';
+                    if (is_range) {
+                        break;
+                    }
+
                     if (is_period && has_period) {
                         size_t word_length = i - begin;
                         size_t mem_length = word_length + 1;

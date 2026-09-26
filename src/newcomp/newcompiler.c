@@ -4,7 +4,7 @@
 
 static SymbolTable native_symbols = {
     .count = 0,
-    .symbols = {},
+    .symbols = { },
     .parent = NULL,
 };
 
@@ -505,12 +505,18 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
 
             // debug_print_formatted("Program has %d symbols", new_module->globals->count);
             SymbolTable* exports = &comp_module->exports;
+            exports->count = 0;
+            exports->parent = NULL;
+
             for (int i = 0; i < new_module->globals->count; i++) {
                 Symbol symbol = new_module->globals->symbols[i];
                 // printf("symbol exported?: %s\n", symbol.value.is_exported == 1 ? "yes" : "no");
                 if (symbol.value.is_exported) {
                     int idx_correct = exports->count;
-                    // symbol.index = idx_correct;
+                    if (symbol.value.type != EXPR_VAL_TYPE_FUNCTION) {
+                        symbol.index = symbol.unique_index;
+                    }
+
                     symbol.unique_index = idx_correct;
 
                     exports->symbols[idx_correct] = symbol;
@@ -672,61 +678,78 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* looping = expr->data.loop_for.looping;
 
             const char* loop_idx_symbol = variable->data.define_body->data.assign.name->data.name;
-            
             push_scope(program);
+            
             if (looping->type == EXPR_NAME) {
                 Symbol found = get_symbol_or_glob(program, looping->data.name);
-                if (found.value.type != EXPR_VAL_TYPE_ARRAY) {
-                    debug_printerr("Cannot loop through non-array value");
+                if (found.value.type != EXPR_VAL_TYPE_ARRAY && found.value.type != EXPR_VAL_TYPE_RANGE) {
+                    printf("Cannot loop through non-array value");
+                    //err_print_format("Cannot loop through non-array value");
                     exit(1);
                 }
 
-                Expression* start = malloc(sizeof(Expression));
-                start->type = EXPR_NUMBER;
-                start->data.value = 0;
+                /* create expression for faster parsing */
+                /*Expression* arr_len_expr = malloc(sizeof(Expression));
+                arr_len_expr->type = EXPR_NUMBER;
+                arr_len_expr->data.value = found.value.value.array_val.count;*/
 
-                Expression* end = malloc(sizeof(Expression));
-                end->type = EXPR_NUMBER;
-                end->data.value = found.value.value.array_val.count;
+                
+                Expression* arr_len_expr = NULL;
+                int is_looping_array = found.value.type == EXPR_VAL_TYPE_ARRAY;
+                if (is_looping_array) {
+                    NameExpr(len_fn, "len");
+                    Expression** parameters = malloc(sizeof(Expression));
+                    parameters[0] = looping;
 
-                Expression* len_array = malloc(sizeof(Expression));
-                len_array->type = EXPR_RANGE;
-                len_array->data.range.start = start;
-                len_array->data.range.end = end;
-                len_array->data.range.included = 0;
+                    arr_len_expr = malloc(sizeof(Expression));
+                    arr_len_expr->type = EXPR_FN_CALL;
+                    arr_len_expr->data.call.callee = len_fn;
+                    arr_len_expr->data.call.arguments = parameters;
+                    arr_len_expr->data.call.argument_count = 1;
+                } else if (found.value.type == EXPR_VAL_TYPE_RANGE) {
+                    double end_val = found.value.value.range.end;
+                    double start_val = found.value.value.range.start;
+                    
+                    Expression* start_num = malloc(sizeof(Expression));
+                    start_num->type = EXPR_NUMBER;
+                    start_num->data.value = start_val;
+
+                    /* delete and replace */
+                    free(variable->data.define_body->data.assign.value);
+                    variable->data.define_body->data.assign.value = start_num;
+
+                    arr_len_expr = malloc(sizeof(Expression));
+                    arr_len_expr->type = EXPR_NUMBER;
+                    arr_len_expr->data.value = end_val;
+                }
 
                 int symbol_reg = get_total_active_registers(program);
-                // display_expression(variable);
                 compile_expr(program, variable, symbol_reg);
 
-                //display_expression(len_array);
+                int reserved_registers = 1;
+                int var_reg;
+                if (is_looping_array) {
+                    var_reg = get_total_active_registers(program);
+                    compile_expr(program, variable->data.define_body->data.assign.value, var_reg);
+                    reserved_registers += 1;
+                    reserve_registers(program, 1);
+                }
 
-                int var_reg = get_total_active_registers(program);
-                // printf("putting variable at: %d\n", var_reg);
-                emit_byte(program, OP_PUSH_U8);
-                emit_byte(program, var_reg);
-                emit_byte(program, 0);
+                int jump_reg = get_total_active_registers(program);
 
                 reserve_registers(program, 1);
 
-                int loop_reg = get_total_active_registers(program);
-                compile_expr(program, len_array, loop_reg);
-
-                int jump_reg = loop_reg + 1;
-                // int symbol_reg = get_symbol_index(program, loop_idx_symbol);
-
-                reserve_registers(program, 2);
-
-                /* pasted */
+                /* compile the arr len as an expression for faster looping */
                 int condition_ptr = program->byte_counter;
-                emit_byte(program, OP_LOAD_FIELD);
-                emit_byte(program, jump_reg);
-                emit_byte(program, loop_reg);
-                emit_byte(program, (uint8_t) 1); 
+                compile_expr(program, arr_len_expr, jump_reg);
+                free(arr_len_expr);
 
                 emit_byte(program, OP_LT);
                 emit_byte(program, jump_reg);
-                emit_byte(program, var_reg);
+
+                if (is_looping_array) emit_byte(program, var_reg); 
+                else emit_byte(program, symbol_reg);
+
                 emit_byte(program, jump_reg);
 
                 emit_byte(program, OP_JUMP_IF_FALSE);
@@ -736,10 +759,12 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_dword(program, 0x0);
                 int block_start = program->byte_counter;
 
-                emit_byte(program, OP_LOAD_INDEX);
-                emit_byte(program, symbol_reg);
-                emit_byte(program, (uint8_t) found.unique_index);
-                emit_byte(program, var_reg);
+                if (is_looping_array) {
+                    emit_byte(program, OP_LOAD_INDEX);
+                    emit_byte(program, symbol_reg);
+                    emit_byte(program, (uint8_t) found.unique_index);
+                    emit_byte(program, var_reg);
+                }
 
                 compile_expr(program, body, jump_reg + 1);
 
@@ -748,9 +773,10 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 emit_byte(program, free_reg);
                 emit_byte(program, (uint8_t) 1);
 
+                int edited_reg = is_looping_array ? var_reg : symbol_reg;
                 emit_byte(program, OP_ADD);
-                emit_byte(program, var_reg);
-                emit_byte(program, var_reg);
+                emit_byte(program, edited_reg);
+                emit_byte(program, edited_reg);
                 emit_byte(program, (uint8_t) free_reg);
 
                 int body_ended_ptr = program->byte_counter;
@@ -760,14 +786,14 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 int diff = (condition_ptr - (body_ended_ptr + 5));
                 emit_byte(program, OP_JUMP);
                 emit_dword(program, diff);
-                free_registers(program, 3);
+                free_registers(program, 2);
 
                 /**/
             } else if (looping->type == EXPR_RANGE) {
-                compile_expr(program, variable, -1);
+                int var_reg = get_total_active_registers(program);
+                compile_expr(program, variable, var_reg);
 
                 int loop_reg = get_total_active_registers(program);
-                
 
                 compile_expr(program, looping, loop_reg);
                 int jump_reg = loop_reg + 1;
@@ -886,9 +912,9 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 SymbolValue symbol_val = compile_expr(program, calle, calling_reg);
                 if (symbol_val.type != EXPR_VAL_TYPE_FUNCTION) {
                     err_print_format(
-                        "Attempted to call %s::%s as function.", 
-                        calle->data.index_expr.target->data.name,
-                        calle->data.index_expr.index->data.name
+                        "Attempted to call ::%s as function, it is of type %s.", 
+                        calle->data.index_expr.index->data.name,
+                        expr_val_to_str((int) symbol_val.type)
                     );
                     exit(1);
                 }
@@ -1036,8 +1062,9 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             int free_reg = get_total_active_registers(program);
 
             // setting up pre-values
-            compile_expr(program, expr->data.range.start, free_reg);
-            compile_expr(program, expr->data.range.end, free_reg + 1);
+
+            SymbolValue st_val = compile_expr(program, expr->data.range.start, free_reg);
+            SymbolValue end_val = compile_expr(program, expr->data.range.end, free_reg + 1);
 
             if (expr->data.range.included == 1) {
                 emit_byte(program, OP_PUSH_1);
@@ -1051,7 +1078,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             emit_byte(program, (uint8_t) reg_used);
             emit_byte(program, (uint8_t) 3);
 
-            return Comp_NilVal;
+            return Comp_RangeVal(st_val.value.num_val, end_val.value.num_val, expr->data.range.included);
         }
 
         case EXPR_ARRAY: { 
@@ -1161,22 +1188,38 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             int is_mod_call = expr->data.index_expr.is_mod_call;
 
             if (is_mod_call) {
-                const char* mod_name = target->data.name;
                 const char* indexed_name = index->data.name;
-                
-                Symbol mod_symbol = get_symbol(program->symbol_table, mod_name);
-                Symbol index = get_symbol(mod_symbol.value.value.module.symbols, indexed_name);
-                // printf("accessing index: %d of module %s\n", (int) index.index, mod_name);
+                int dest_reg = reg_used >= 0 ? reg_used : get_total_active_registers(program);
+                int mod_reg = dest_reg;
+                SymbolValue mod_value;
+
+                if (target->type == EXPR_NAME) {
+                    Symbol mod_symbol = get_symbol_or_glob(program, target->data.name);
+                    mod_value = mod_symbol.value;
+                    mod_reg = mod_symbol.unique_index;
+                } else {
+                    
+                    mod_value = compile_expr(program, target, dest_reg);
+                }
+
+                if (mod_value.type != EXPR_VAL_TYPE_MODULE) {
+                    err_print_format(
+                        "Compilation aborted, reason:\n\033[1;31m[Compile Error]\033[0m: Cannot use '::' on a value of type %s.",
+                        expr_val_to_str((int) mod_value.type)
+                    );
+                    exit(1);
+                }
+
+                Symbol field = get_symbol(mod_value.value.module.symbols, indexed_name);
 
                 emit_byte(program, OP_LOAD_FIELD);
-                emit_byte(program, reg_used);
-                emit_byte(program, (uint8_t) mod_symbol.unique_index);
-                emit_byte(program, index.index);
+                emit_byte(program, (uint8_t) dest_reg);
+                emit_byte(program, (uint8_t) mod_reg);
+                emit_byte(program, (uint8_t) field.unique_index);
 
-                debug_print_formatted("Loading %s::%s", mod_name, indexed_name);
-                //exit(1);
+                debug_print_formatted("Loading ::%s", indexed_name);
 
-                return index.value;
+                return field.value;
             }
 
             Symbol target_symbol = get_symbol(program->symbol_table, target->data.name);
@@ -1243,9 +1286,11 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             Expression* def_body = expr->data.define_body;
             int is_global = program->enclosing == NULL && program->is_main == 0;
             debug_print_formatted("is global? %s", is_global == 1 ? "yes" : "no");
+            
             if (def_body->type == EXPR_ASSIGN) {
                 Expression* assign_name = def_body->data.assign.name;
                 Symbol* entry = push_symbol_entry(program, assign_name->data.name, is_global);
+                //debug_print_formatted("assigned name: %s to value of type: %d", assign_name->data.name, (int) def_body->data.assign.value->type);
                 SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
                 defined_value.is_exported = expr->is_exporting;
                 entry->value = defined_value;
@@ -1292,7 +1337,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             if (symbolfound == NULL) {
                 symbolfound = find_symbol(program->globals, assign_name);
                 if (symbolfound == NULL) {
-                    debug_print_formatted("Symbol [%s] undefined.", assign_name);
+                    err_print_format("Symbol [%s] undefined.", assign_name);
                     exit(1);
                 }
             }
@@ -1391,8 +1436,9 @@ int write_module_to_file(CompiledModule* module, FILE* file) {
     fwrite(&exported, sizeof(exported), 1, file);
     fwrite(&module_size, sizeof(module_size), 1, file);
     fwrite(&func_count, sizeof(func_count), 1, file);
-    debug_print_formatted("Writing module with %d functions and %d exports.", func_count, exported);
+    //debug_print_formatted("Writing module with %d functions and %d exports.", func_count, exported);
 
+    //printf("Exports: [");
     for (uint8_t field_idx = 0; field_idx < exported; field_idx++) {//module->exports.symbols->unique_index;
         Symbol symbol = module->exports.symbols[(int) field_idx];
         uint8_t reg_referenced = symbol.index;
@@ -1400,8 +1446,12 @@ int write_module_to_file(CompiledModule* module, FILE* file) {
         fwrite(&field_idx, sizeof(field_idx), 1, file);
         fwrite(&symbol_type, sizeof(uint8_t), 1, file);
         fwrite(&reg_referenced, sizeof(reg_referenced), 1, file);
-        debug_print_formatted("Export id %d is actually referencing Reg%d, and is of type (uint8) %d", field_idx, reg_referenced, symbol_type);
+        //printf("(id: %d, reg: %d, type: %d)", field_idx, reg_referenced, symbol_type);
+        if (field_idx + 1 < exported) {
+            //printf(", ");
+        }
     }
+    //printf("]\n");
 
     for (int i = 0; i < func_count; i++) {
         write_function_to_file(mod_prog->functions[i], file);
@@ -1589,9 +1639,12 @@ void print_program_bytecode(const char* compiled_input) {
 
 void load_natives() {
     native_symbols.symbols[0] = Def_Native_Function("print", 0);
+    native_symbols.symbols[1] = Def_Native_Function("len", 1);
+    native_symbols.symbols[2] = Def_Native_Function("tostring", 2);
+    native_symbols.symbols[3] = Def_Native_Function("type", 3);
     // global_symbols.symbols[1] = DEF_NATIVE_FN("len", 1);
 
-    native_symbols.count = 1;
+    native_symbols.count = 4;
 }
 
 int compile_program(const char* file_name, const char* output, int see_bytecode) {

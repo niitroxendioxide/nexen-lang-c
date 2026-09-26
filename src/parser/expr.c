@@ -921,7 +921,12 @@ void display_expression(Expression* expr) {
         case EXPR_INDEX: {
             Expression* idx = expr->data.index_expr.index;
             Expression* tgt = expr->data.index_expr.target;
-            fprintf(stderr, "Index <Expr>: [%s, %d]\n", idx->data.value, idx->data.name);
+
+            if (expr->data.index_expr.is_mod_call) {
+                fprintf(stderr, "Index <Expr>: [%s, %s]\n", tgt->data.name, idx->data.name);
+            } else {
+                fprintf(stderr, "Index <Expr>: [%s, %d]\n", idx->data.value, idx->data.name);
+            }
             break;
         }
 

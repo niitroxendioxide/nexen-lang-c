@@ -1,0 +1,3 @@
+import c_mod = "c"
+
+export let c = c_mod

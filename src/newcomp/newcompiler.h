@@ -111,6 +111,12 @@ typedef struct SymbolValue {
         } array_val;
 
         struct {
+            double start;
+            double end;
+            uint8_t included;
+        } range;
+
+        struct {
             struct SymbolTable* symbols;
         } module;
     } value;
@@ -129,6 +135,12 @@ typedef struct {
 #define Comp_NumVal(p_num_val) (SymbolValue){ .type = EXPR_VAL_TYPE_NUMBER, .value.num_val = p_num_val}
 #define Comp_ArrayVal(p_arr_type, p_arr_count) (SymbolValue){.type = EXPR_VAL_TYPE_ARRAY, .value.array_val.arr_type = p_arr_type, .value.array_val.count = p_arr_count}
 #define Comp_BoolVal(p_bool_val) (SymbolValue){ .type = EXPR_VAL_TYPE_BOOLEAN, .value.bool_val = p_bool_val }
+#define Comp_RangeVal(p_start_val, p_end_val, p_included)   \
+(SymbolValue){ .type = EXPR_VAL_TYPE_RANGE, .value.range = {\
+    .start = p_start_val,                                   \
+    .end = p_end_val,                                       \
+    .included = p_included,                                 \
+} }                                                         \
 
 
 #define Def_Native_Lib(lib_name, idx) (Symbol){.index = idx, .name = lib_name, .unique_index = idx, .value.type = EXPR_VAL_TYPE_DICT, .global = 1 }

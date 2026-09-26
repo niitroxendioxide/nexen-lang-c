@@ -1,3 +1,0 @@
-import b = "b";
-let d = b::c::d;
-print(d)

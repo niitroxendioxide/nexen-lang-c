@@ -510,13 +510,11 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 // printf("symbol exported?: %s\n", symbol.value.is_exported == 1 ? "yes" : "no");
                 if (symbol.value.is_exported) {
                     int idx_correct = exports->count;
-                    symbol.index = idx_correct;
+                    // symbol.index = idx_correct;
                     symbol.unique_index = idx_correct;
 
                     exports->symbols[idx_correct] = symbol;
                     exports->count++;
-                    //exports->symbols[exports->count++].index = i;
-                    //exports->symbols[exports->count++].unique_index = i;
                 }
             }
 
@@ -566,7 +564,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
             push_scope(program);
             for (int i = 0; i < expr->data.block.count; i++) {
                 Expression* cur_block_expr = expr->data.block.statements[i];
-                compile_expr(program, cur_block_expr, reg_used);
+                compile_expr(program, cur_block_expr, get_total_active_registers(program));
             }
             pop_scope(program);
             //emit_byte(program, OP_POP_SCOPE);
@@ -1069,7 +1067,7 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 if (defined_symbol->value.type == EXPR_VAL_TYPE_STRING) is_str_array = 1;
             }
 
-            if (count > 10 || is_str_array) {
+            if (count > 2 || is_str_array) {
                 Constant** const_elements_array = malloc(sizeof(Constant) * count);
                 Constant array_val = {
                     .as.array.elements = const_elements_array, 
@@ -1264,6 +1262,21 @@ SymbolValue compile_expr(Program* program, Expression* expr, int reg_used) {
                 SymbolValue defined_value = compile_expr(program, def_body, entry->unique_index);
                 defined_value.is_exported = expr->is_exporting;
                 // printf("func defined type: %d\n", (int) defined_value.type);
+
+                int fnidx = 0;
+                for (int i = 0; i < program->func_count; i++) {
+                    if (i > 255 && is_global) {
+                        err_print_format("Cannot export more than 255 expressions (functions included) per module.");
+                        exit(1);
+                    }
+
+                    Function* fnval = program->functions[i];
+                    if (strcmp(fnval->name, fn_name) == 0) {
+                        fnidx = i;
+                    }
+                }
+
+                entry->index = fnidx;
                 entry->value = defined_value;
                 return defined_value;
             }
@@ -1381,10 +1394,13 @@ int write_module_to_file(CompiledModule* module, FILE* file) {
     debug_print_formatted("Writing module with %d functions and %d exports.", func_count, exported);
 
     for (uint8_t field_idx = 0; field_idx < exported; field_idx++) {//module->exports.symbols->unique_index;
-        uint8_t reg_referenced = module->exports.symbols[(int) field_idx].unique_index;
-        debug_print_formatted("Export id %d is actually referencing Reg%d", field_idx, reg_referenced);
+        Symbol symbol = module->exports.symbols[(int) field_idx];
+        uint8_t reg_referenced = symbol.index;
+        uint8_t symbol_type = (uint8_t) symbol.value.type;
         fwrite(&field_idx, sizeof(field_idx), 1, file);
+        fwrite(&symbol_type, sizeof(uint8_t), 1, file);
         fwrite(&reg_referenced, sizeof(reg_referenced), 1, file);
+        debug_print_formatted("Export id %d is actually referencing Reg%d, and is of type (uint8) %d", field_idx, reg_referenced, symbol_type);
     }
 
     for (int i = 0; i < func_count; i++) {
